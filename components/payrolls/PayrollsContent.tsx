@@ -1,0 +1,351 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { ru } from 'date-fns/locale';
+import { toast } from 'sonner';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+
+import { 
+  Employee, 
+  Payroll, 
+  WorkNorm,
+  employeesApi,
+  payrollsApi,
+  workNormsApi,
+  settingsApi
+} from '@/lib/supabase';
+
+import { PayrollsTable } from './PayrollsTable';
+import { EditWorkNormDialog } from './EditWorkNormDialog';
+import { PayrollDialog } from './PayrollDialog';
+import { MonthYearSelector } from './MonthYearSelector';
+import { formatCurrency, roundToTwoDecimals } from './utils';
+
+export function PayrollsContent() {
+  // State for selected month/year
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  
+  // Data loading states
+  const [isLoading, setIsLoading] = useState(true);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [payrolls, setPayrolls] = useState<Payroll[]>([]);
+  const [workNorm, setWorkNorm] = useState<WorkNorm | null>(null);
+  const [minSalary, setMinSalary] = useState(0);
+  const [incomeTaxRate, setIncomeTaxRate] = useState(13);
+  const [fsznRate, setFsznRate] = useState(34);
+  const [insuranceRate, setInsuranceRate] = useState(0.6);
+  
+  // UI state
+  const [isEditWorkNormOpen, setIsEditWorkNormOpen] = useState(false);
+  const [isPayrollDialogOpen, setIsPayrollDialogOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [selectedPayroll, setSelectedPayroll] = useState<Payroll | undefined>();
+
+  // Fetch all necessary data when month/year changes
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      
+      try {
+        // Fetch employees
+        console.log('Fetching employees...');
+        const employeesData = await employeesApi.getAll();
+        console.log('Employees fetched successfully:', employeesData.length);
+        setEmployees(employeesData);
+      } catch (error) {
+        console.error('Error fetching employees:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        toast.error('Ошибка при загрузке сотрудников');
+        setIsLoading(false);
+        return; // Stop execution if employees fetch fails
+      }
+      
+      try {
+        // Fetch payrolls for selected month/year
+        console.log(`Fetching payrolls for ${selectedYear}/${selectedMonth}...`);
+        const payrollsData = await payrollsApi.getByYearMonth(selectedYear, selectedMonth);
+        console.log('Payrolls fetched successfully:', payrollsData.length);
+        setPayrolls(payrollsData);
+      } catch (error) {
+        console.error(`Error fetching payrolls for ${selectedYear}/${selectedMonth}:`, error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        toast.error('Ошибка при загрузке начислений');
+        setIsLoading(false);
+        return; // Stop execution if payrolls fetch fails
+      }
+      
+      try {
+        // Fetch work norm for selected month/year
+        console.log(`Fetching work norm for ${selectedYear}/${selectedMonth}...`);
+        let workNormData = await workNormsApi.getByYearMonth(selectedYear, selectedMonth);
+        
+        // If no work norm exists for this month, create a default one
+        if (!workNormData) {
+          console.log('No work norm found, creating default...');
+          try {
+            workNormData = await workNormsApi.upsert({
+              year: selectedYear,
+              month: selectedMonth,
+              norm_hours: 168, // Default to 40 hours/week * 4.2 weeks
+            });
+            console.log('Default work norm created:', workNormData);
+          } catch (error) {
+            console.error('Error creating default work norm:', error);
+            console.error('Error details:', JSON.stringify(error, null, 2));
+            toast.error('Ошибка при создании нормы рабочего времени');
+          }
+        } else {
+          console.log('Work norm found:', workNormData);
+        }
+        
+        setWorkNorm(workNormData);
+      } catch (error) {
+        console.error(`Error fetching work norm for ${selectedYear}/${selectedMonth}:`, error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        toast.error('Ошибка при загрузке нормы рабочего времени');
+        setIsLoading(false);
+        return; // Stop execution if work norm fetch fails
+      }
+      
+      try {
+        // Fetch settings
+        console.log('Fetching settings...');
+        const settings = await settingsApi.get();
+        console.log('Settings fetched successfully:', settings);
+        setMinSalary(settings.min_salary || 0);
+        setIncomeTaxRate(settings.income_tax || 13);
+        setFsznRate(settings.fszn_rate || 34);
+        setInsuranceRate(settings.insurance_rate || 0.6);
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
+        toast.error('Ошибка при загрузке настроек');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [selectedYear, selectedMonth]);
+
+  // Handle saving work norm
+  const handleSaveWorkNorm = async (normHours: number): Promise<void> => {
+    try {
+      const updatedWorkNorm = await workNormsApi.upsert({
+        year: selectedYear,
+        month: selectedMonth,
+        norm_hours: normHours,
+      });
+      
+      setWorkNorm(updatedWorkNorm);
+      toast.success('Норма рабочего времени сохранена');
+    } catch (error) {
+      console.error('Error saving work norm:', error);
+      toast.error('Ошибка при сохранении нормы рабочего времени');
+      throw error; // Re-throw to let the dialog handle the error
+    }
+  };
+
+  // Handle saving payroll
+  const handleSavePayroll = async (payrollData: any) => {
+    if (!selectedEmployee) return;
+    
+    try {
+      setIsLoading(true);
+      
+      // Базовые данные из формы
+      const payrollToSave = {
+        ...payrollData,
+        employee_id: selectedEmployee.id,
+        year: selectedYear,
+        month: selectedMonth,
+      };
+      
+      // Всегда пересчитываем все поля при сохранении или обновлении
+      // Это гарантирует, что все данные будут обновлены при редактировании
+      
+      // Оклад (если не указан, берем из ставки сотрудника)
+      payrollToSave.salary = payrollData.salary || roundToTwoDecimals(selectedEmployee.rate * minSalary);
+      
+      // Начислено по окладу (зависит от отработанных часов)
+      const fullSalary = payrollToSave.salary;
+      const normHours = workNorm?.norm_hours || 1;
+      const workedHours = payrollToSave.worked_hours || 0;
+      payrollToSave.salary_accrued = roundToTwoDecimals((fullSalary / normHours) * workedHours);
+      
+      // Всего начислено
+      payrollToSave.total_accrued = roundToTwoDecimals(
+        (payrollToSave.salary_accrued || 0) + 
+        (payrollToSave.bonus || 0) + 
+        (payrollToSave.extra_pay || 0)
+      );
+      
+      // Подоходный налог
+      payrollToSave.income_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * (incomeTaxRate / 100));
+      
+      // Пенсионный налог
+      payrollToSave.pension_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * 0.01);
+      
+      // Всего удержано
+      payrollToSave.total_deductions = roundToTwoDecimals(
+        (payrollToSave.income_tax || 0) + 
+        (payrollToSave.pension_tax || 0) + 
+        (payrollToSave.other_deductions || 0)
+      );
+      
+      // К выдаче
+      payrollToSave.total_payable = roundToTwoDecimals(
+        (payrollToSave.total_accrued || 0) - 
+        (payrollToSave.total_deductions || 0)
+      );
+      
+      // К выдаче без аванса: К ВЫДАЧЕ - АВАНС
+      payrollToSave.payable_without_salary = roundToTwoDecimals(
+        (payrollToSave.total_payable || 0) - 
+        (payrollToSave.advance_payment || 0)
+      );
+      
+      // ФСЗН
+      payrollToSave.fszn_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * (fsznRate / 100));
+      
+      // Страховой взнос
+      payrollToSave.insurance_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * (insuranceRate / 100));
+      
+      // Общая стоимость сотрудника
+      payrollToSave.total_employee_cost = roundToTwoDecimals(
+        (payrollToSave.total_payable || 0) + 
+        (payrollToSave.fszn_tax || 0) + 
+        (payrollToSave.insurance_tax || 0)
+      );
+
+      // Save or update payroll
+      const savedPayroll = await payrollsApi.upsert(payrollToSave);
+      
+      // Используем сохраненные данные
+      const enhancedPayroll = {
+        ...savedPayroll
+      };
+      
+      // Update local state
+      setPayrolls(prev => {
+        const existingIndex = prev.findIndex(p => p.employee_id === selectedEmployee.id);
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = enhancedPayroll;
+          return updated;
+        } else {
+          return [...prev, enhancedPayroll];
+        }
+      });
+      
+      toast.success('Зарплата успешно сохранена');
+      return savedPayroll;
+    } catch (error) {
+      console.error('Error saving payroll:', error);
+      toast.error('Ошибка при сохранении зарплаты');
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle edit payroll click
+  const handleEditPayroll = (employee: Employee) => {
+    const employeePayroll = payrolls.find(p => p.employee_id === employee.id);
+    setSelectedEmployee(employee);
+    setSelectedPayroll(employeePayroll || undefined);
+    setIsPayrollDialogOpen(true);
+  };
+
+  // Format month name for display
+  const monthName = format(new Date(selectedYear, selectedMonth - 1), 'LLLL', { locale: ru });
+  const formattedMonthName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="container mx-auto p-6">
+        <Skeleton className="h-10 w-64 mb-6" />
+        <div className="space-y-4">
+          {[...Array(5)].map((_, i) => (
+            <Skeleton key={i} className="h-20 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold">Зарплаты</h1>
+        <div className="flex items-center space-x-4">
+          <MonthYearSelector
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            onYearChange={setSelectedYear}
+            onMonthChange={setSelectedMonth}
+          />
+        </div>
+      </div>
+
+      {/* Payrolls Table */}
+      <Card>
+        <CardHeader className="pb-2">
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-lg">
+              Начисления за {formattedMonthName} {selectedYear} года
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <PayrollsTable
+            employees={employees}
+            payrolls={payrolls.map(p => ({
+              ...p,
+              employee: employees.find(e => e.id === p.employee_id)!
+            }))}
+            workNorm={workNorm}
+            minSalary={minSalary}
+            incomeTaxRate={incomeTaxRate}
+            onEditPayroll={handleEditPayroll}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Edit Work Norm Dialog */}
+      <EditWorkNormDialog
+        open={isEditWorkNormOpen}
+        onOpenChange={setIsEditWorkNormOpen}
+        workNorm={workNorm}
+        year={selectedYear}
+        month={selectedMonth}
+        onSave={handleSaveWorkNorm}
+      />
+
+      {/* Payroll Dialog */}
+      {selectedEmployee && (
+        <PayrollDialog
+          open={isPayrollDialogOpen}
+          onOpenChange={setIsPayrollDialogOpen}
+          employee={selectedEmployee}
+          payroll={selectedPayroll}
+          workNorm={workNorm}
+          year={selectedYear}
+          month={selectedMonth}
+          minSalary={minSalary}
+          incomeTaxRate={incomeTaxRate}
+          fsznRate={fsznRate}
+          insuranceRate={insuranceRate}
+          onSave={handleSavePayroll}
+        />
+      )}
+    </div>
+  );
+}
