@@ -278,13 +278,39 @@ export const payrollsApi = {
   
   // Создать или обновить начисление зарплаты
   async upsert(payroll: Omit<Payroll, 'id' | 'created_at'>) {
-    const { data, error } = await supabase
+    // Сначала проверяем, существует ли уже запись для этого сотрудника, месяца и года
+    const { data: existingData } = await supabase
       .from('payrolls')
-      .upsert(payroll, { onConflict: 'employee_id,year,month' })
-      .select();
+      .select('id')
+      .eq('employee_id', payroll.employee_id)
+      .eq('year', payroll.year)
+      .eq('month', payroll.month)
+      .maybeSingle();
     
-    if (error) throw error;
-    return data?.[0] as Payroll;
+    let result;
+    
+    if (existingData?.id) {
+      // Если запись существует, обновляем её
+      const { data, error } = await supabase
+        .from('payrolls')
+        .update(payroll)
+        .eq('id', existingData.id)
+        .select();
+      
+      if (error) throw error;
+      result = data?.[0];
+    } else {
+      // Если записи нет, создаем новую
+      const { data, error } = await supabase
+        .from('payrolls')
+        .insert(payroll)
+        .select();
+      
+      if (error) throw error;
+      result = data?.[0];
+    }
+    
+    return result as Payroll;
   },
   
   // Удалить начисление зарплаты
