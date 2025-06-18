@@ -8,9 +8,11 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Calendar } from "@/components/ui/calendar";
+import { useRouter } from 'next/navigation';
 import { format } from "date-fns";
 import { ru } from "date-fns/locale";
-import { Calendar as CalendarIcon, Plus, Edit, Trash2, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Calendar as CalendarIcon, Plus, Edit, Trash2, Loader2, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useEffect, useState } from "react";
@@ -24,7 +26,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { supabase, employeesApi, Employee as SupabaseEmployee } from "@/lib/supabase";
-import { toast } from "sonner";
 
 // Схема для валидации формы
 const employeeSchema = z.object({
@@ -52,6 +53,7 @@ type EmployeeUI = {
 };
 
 function EmployeesPageContent() {
+  const router = useRouter();
   const [employees, setEmployees] = useState<EmployeeUI[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -429,7 +431,16 @@ function EmployeesPageContent() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => router.push(`/members/${employee.id}`)}
+                            title="Просмотр карточки сотрудника"
+                          >
+                            <User className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => handleEdit(employee)}
+                            title="Редактировать"
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
@@ -438,6 +449,7 @@ function EmployeesPageContent() {
                             size="icon"
                             className="text-red-500 hover:text-red-600"
                             onClick={() => employee.id !== undefined && handleDelete(employee.id)}
+                            title="Удалить"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>

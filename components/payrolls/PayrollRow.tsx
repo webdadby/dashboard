@@ -33,23 +33,23 @@ export function PayrollRow({
   const payableWithoutAdvance = roundToTwoDecimals(payroll?.payable_without_salary || (totalPayable - advancePayment));
 
   return (
-    <tr>
-      <td>{employee.name}</td>
-      <td>{normHours}</td>
-      <td>{workedHours}</td>
-      <td>{salary}</td>
-      <td>{salaryAccrued}</td>
-      <td>{bonus}</td>
-      <td>{extraPay}</td>
-      <td className="font-semibold">{totalAccrued}</td>
-      <td>{incomeTax}</td>
-      <td>{pensionTax}</td>
-      <td>{advancePayment}</td>
-      <td>{otherDeductions}</td>
-      <td className="font-semibold">{totalDeductions}</td>
-      <td className="font-bold">{totalPayable}</td>
-      <td className="font-semibold">{payableWithoutAdvance}</td>
-      <td>
+    <tr className="border-b hover:bg-muted/10">
+      <td className="border-r">{employee.name}</td>
+      <td className="border-r text-center">{normHours}</td>
+      <td className="border-r text-center">{workedHours}</td>
+      <td className="border-r text-center">{formatCurrency(salary)}</td>
+      <td className="border-r text-center">{formatCurrency(salaryAccrued)}</td>
+      <td className="border-r text-center">{formatCurrency(bonus)}</td>
+      <td className="border-r text-center">{formatCurrency(extraPay)}</td>
+      <td className="border-r text-center font-semibold bg-muted/20">{formatCurrency(totalAccrued)}</td>
+      <td className="border-r text-center">{formatCurrency(incomeTax)}</td>
+      <td className="border-r text-center">{formatCurrency(pensionTax)}</td>
+      <td className="border-r text-center">{formatCurrency(advancePayment)}</td>
+      <td className="border-r text-center">{formatCurrency(otherDeductions)}</td>
+      <td className="border-r text-center font-semibold bg-muted/20">{formatCurrency(totalDeductions)}</td>
+      <td className="border-r text-center font-bold bg-primary/10">{formatCurrency(totalPayable)}</td>
+      <td className="border-r text-center font-semibold">{formatCurrency(payableWithoutAdvance)}</td>
+      <td className="text-center">
         <Button 
           variant="outline" 
           size="sm"

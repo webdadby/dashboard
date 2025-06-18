@@ -22,6 +22,8 @@ export interface PayrollDialogProps {
   incomeTaxRate: number;
   fsznRate: number;
   insuranceRate: number;
+  benefitAmount: number;
+  taxDeduction: number;
   onSave: (payroll: any) => void;
 }
 

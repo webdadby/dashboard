@@ -20,6 +20,8 @@ const settingsSchema = z.object({
   income_tax: z.number().min(0, "Tax rate cannot be negative").max(100, "Tax rate cannot be more than 100%"),
   fszn_rate: z.number().min(0, "FSZN rate cannot be negative").max(100, "FSZN rate cannot be more than 100%"),
   insurance_rate: z.number().min(0, "Insurance rate cannot be negative").max(100, "Insurance rate cannot be more than 100%"),
+  benefit_amount: z.number().min(0, "Benefit amount cannot be negative"),
+  tax_deduction: z.number().min(0, "Tax deduction cannot be negative"),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -45,6 +47,8 @@ function SettingsPageContent() {
       income_tax: 13,
       fszn_rate: 34,
       insurance_rate: 0.6,
+      benefit_amount: 0,
+      tax_deduction: 0,
     },
   });
 
@@ -63,7 +67,8 @@ function SettingsPageContent() {
           const settingsObj: Partial<SettingsFormValues> = {};
           data.forEach((setting: Setting) => {
             if (setting.key === 'min_salary' || setting.key === 'income_tax' || 
-                setting.key === 'fszn_rate' || setting.key === 'insurance_rate') {
+                setting.key === 'fszn_rate' || setting.key === 'insurance_rate' ||
+                setting.key === 'benefit_amount' || setting.key === 'tax_deduction') {
               settingsObj[setting.key as keyof SettingsFormValues] = setting.value;
             }
           });
@@ -87,37 +92,53 @@ function SettingsPageContent() {
     try {
       const supabase = createClient();
       
-      // Update minimum salary
+      // Update or insert min salary
       const { error: minSalaryError } = await supabase
         .from("settings")
-        .update({ value: data.min_salary })
-        .eq("key", "min_salary");
+        .upsert({ key: "min_salary", value: data.min_salary })
+        .select();
 
       if (minSalaryError) throw minSalaryError;
 
-      // Update income tax rate
+      // Update or insert income tax
       const { error: incomeTaxError } = await supabase
         .from("settings")
-        .update({ value: data.income_tax })
-        .eq("key", "income_tax");
+        .upsert({ key: "income_tax", value: data.income_tax })
+        .select();
 
       if (incomeTaxError) throw incomeTaxError;
-      
-      // Update FSZN rate
+
+      // Update or insert FSZN rate
       const { error: fsznRateError } = await supabase
         .from("settings")
-        .update({ value: data.fszn_rate })
-        .eq("key", "fszn_rate");
+        .upsert({ key: "fszn_rate", value: data.fszn_rate })
+        .select();
 
       if (fsznRateError) throw fsznRateError;
-      
-      // Update insurance rate
+
+      // Update or insert insurance rate
       const { error: insuranceRateError } = await supabase
         .from("settings")
-        .update({ value: data.insurance_rate })
-        .eq("key", "insurance_rate");
+        .upsert({ key: "insurance_rate", value: data.insurance_rate })
+        .select();
 
       if (insuranceRateError) throw insuranceRateError;
+      
+      // Update or insert benefit amount
+      const { error: benefitAmountError } = await supabase
+        .from("settings")
+        .upsert({ key: "benefit_amount", value: data.benefit_amount })
+        .select();
+
+      if (benefitAmountError) throw benefitAmountError;
+      
+      // Update or insert tax deduction
+      const { error: taxDeductionError } = await supabase
+        .from("settings")
+        .upsert({ key: "tax_deduction", value: data.tax_deduction })
+        .select();
+
+      if (taxDeductionError) throw taxDeductionError;
 
       toast.success("Settings saved successfully");
     } catch (error) {
@@ -245,6 +266,54 @@ function SettingsPageContent() {
                 {form.formState.errors.insurance_rate && (
                   <p className="text-sm text-red-500">
                     {form.formState.errors.insurance_rate.message}
+                  </p>
+                )}
+              </div>
+            </div>
+            
+            <div className="mt-4 text-lg font-medium">Tax Benefits</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="benefit_amount">Сумма для льготы (RUB)</Label>
+                <Input
+                  id="benefit_amount"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  {...form.register("benefit_amount", {
+                    setValueAs: (value) => {
+                      if (!value) return 0;
+                      const num = parseFloat(value.toString().replace(',', '.'));
+                      return isNaN(num) ? 0 : num;
+                    }
+                  })}
+                  onChange={(e) => handleNumberChange(e, 'benefit_amount')}
+                />
+                {form.formState.errors.benefit_amount && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.benefit_amount.message}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="tax_deduction">Налоговый вычет (RUB)</Label>
+                <Input
+                  id="tax_deduction"
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  {...form.register("tax_deduction", {
+                    setValueAs: (value) => {
+                      if (!value) return 0;
+                      const num = parseFloat(value.toString().replace(',', '.'));
+                      return isNaN(num) ? 0 : num;
+                    }
+                  })}
+                  onChange={(e) => handleNumberChange(e, 'tax_deduction')}
+                />
+                {form.formState.errors.tax_deduction && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.tax_deduction.message}
                   </p>
                 )}
               </div>

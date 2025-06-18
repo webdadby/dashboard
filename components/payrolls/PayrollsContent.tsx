@@ -40,6 +40,8 @@ export function PayrollsContent() {
   const [incomeTaxRate, setIncomeTaxRate] = useState(13);
   const [fsznRate, setFsznRate] = useState(34);
   const [insuranceRate, setInsuranceRate] = useState(0.6);
+  const [benefitAmount, setBenefitAmount] = useState(0);
+  const [taxDeduction, setTaxDeduction] = useState(0);
   
   // UI state
   const [isEditWorkNormOpen, setIsEditWorkNormOpen] = useState(false);
@@ -122,6 +124,8 @@ export function PayrollsContent() {
         setIncomeTaxRate(settings.income_tax || 13);
         setFsznRate(settings.fszn_rate || 34);
         setInsuranceRate(settings.insurance_rate || 0.6);
+        setBenefitAmount(settings.benefit_amount || 0);
+        setTaxDeduction(settings.tax_deduction || 0);
       } catch (error) {
         console.error('Error fetching settings:', error);
         console.error('Error details:', JSON.stringify(error, null, 2));
@@ -159,7 +163,8 @@ export function PayrollsContent() {
     try {
       setIsLoading(true);
       
-      // Базовые данные из формы
+      // Сохраняем все данные, переданные из диалога
+      // Все расчеты уже выполнены в диалоге и переданы в payrollData
       const payrollToSave = {
         ...payrollData,
         employee_id: selectedEmployee.id,
@@ -167,62 +172,22 @@ export function PayrollsContent() {
         month: selectedMonth,
       };
       
-      // Всегда пересчитываем все поля при сохранении или обновлении
-      // Это гарантирует, что все данные будут обновлены при редактировании
+      // Проверяем, что все необходимые поля присутствуют
+      console.log('Saving payroll data:', payrollToSave);
       
-      // Оклад (если не указан, берем из ставки сотрудника)
-      payrollToSave.salary = payrollData.salary || roundToTwoDecimals(selectedEmployee.rate * minSalary);
+      // Убедимся, что все числовые поля округлены до 2 знаков после запятой
+      const numericFields = [
+        'worked_hours', 'salary', 'salary_accrued', 'bonus', 'extra_pay', 
+        'income_tax', 'pension_tax', 'advance_payment', 'other_deductions',
+        'total_accrued', 'total_deductions', 'total_payable', 'payable_without_salary',
+        'fszn_tax', 'insurance_tax', 'total_employee_cost'
+      ];
       
-      // Начислено по окладу (зависит от отработанных часов)
-      const fullSalary = payrollToSave.salary;
-      const normHours = workNorm?.norm_hours || 1;
-      const workedHours = payrollToSave.worked_hours || 0;
-      payrollToSave.salary_accrued = roundToTwoDecimals((fullSalary / normHours) * workedHours);
-      
-      // Всего начислено
-      payrollToSave.total_accrued = roundToTwoDecimals(
-        (payrollToSave.salary_accrued || 0) + 
-        (payrollToSave.bonus || 0) + 
-        (payrollToSave.extra_pay || 0)
-      );
-      
-      // Подоходный налог
-      payrollToSave.income_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * (incomeTaxRate / 100));
-      
-      // Пенсионный налог
-      payrollToSave.pension_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * 0.01);
-      
-      // Всего удержано
-      payrollToSave.total_deductions = roundToTwoDecimals(
-        (payrollToSave.income_tax || 0) + 
-        (payrollToSave.pension_tax || 0) + 
-        (payrollToSave.other_deductions || 0)
-      );
-      
-      // К выдаче
-      payrollToSave.total_payable = roundToTwoDecimals(
-        (payrollToSave.total_accrued || 0) - 
-        (payrollToSave.total_deductions || 0)
-      );
-      
-      // К выдаче без аванса: К ВЫДАЧЕ - АВАНС
-      payrollToSave.payable_without_salary = roundToTwoDecimals(
-        (payrollToSave.total_payable || 0) - 
-        (payrollToSave.advance_payment || 0)
-      );
-      
-      // ФСЗН
-      payrollToSave.fszn_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * (fsznRate / 100));
-      
-      // Страховой взнос
-      payrollToSave.insurance_tax = roundToTwoDecimals((payrollToSave.total_accrued || 0) * (insuranceRate / 100));
-      
-      // Общая стоимость сотрудника
-      payrollToSave.total_employee_cost = roundToTwoDecimals(
-        (payrollToSave.total_payable || 0) + 
-        (payrollToSave.fszn_tax || 0) + 
-        (payrollToSave.insurance_tax || 0)
-      );
+      numericFields.forEach(field => {
+        if (payrollToSave[field] !== undefined) {
+          payrollToSave[field] = roundToTwoDecimals(Number(payrollToSave[field]));
+        }
+      });
 
       // Save or update payroll
       const savedPayroll = await payrollsApi.upsert(payrollToSave);
@@ -294,6 +259,31 @@ export function PayrollsContent() {
           />
         </div>
       </div>
+      
+      <div className="grid grid-cols-4 gap-8 mb-4">
+        <div className="p-4 border rounded-md">
+          <div className="text-sm font-medium">Норма рабочего времени</div>
+          <div className="text-2xl font-bold">{workNorm?.norm_hours}</div>
+        </div>
+        <div className="p-4 border rounded-md">
+          <div className="text-sm font-medium">ВСЕГО НАЧИСЛЕНО</div>
+          <div className="text-2xl font-bold text-green-600">
+            {formatCurrency(payrolls.reduce((sum, payroll) => sum + (payroll.total_accrued || 0), 0))}
+          </div>
+        </div>
+        <div className="p-4 border rounded-md">
+          <div className="text-sm font-medium">ФОТ</div>
+          <div className="text-2xl font-bold text-green-600">
+            {formatCurrency(payrolls.reduce((sum, payroll) => sum + (payroll.total_employee_cost || 0), 0))}
+          </div>
+        </div>
+        <div className="p-4 border rounded-md">
+          <div className="text-sm font-medium">ФОТ БЕЗ АВАНСА</div>
+          <div className="text-2xl font-bold text-green-600">
+            {formatCurrency(payrolls.reduce((sum, payroll) => sum + ((payroll.total_employee_cost || 0) - (payroll.advance_payment || 0)), 0))}
+          </div>
+        </div>
+      </div>
 
       {/* Payrolls Table */}
       <Card>
@@ -343,6 +333,8 @@ export function PayrollsContent() {
           incomeTaxRate={incomeTaxRate}
           fsznRate={fsznRate}
           insuranceRate={insuranceRate}
+          benefitAmount={benefitAmount}
+          taxDeduction={taxDeduction}
           onSave={handleSavePayroll}
         />
       )}

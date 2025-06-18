@@ -80,6 +80,18 @@ export const employeesApi = {
     if (error) throw error;
     return data || [];
   },
+  
+  // Получить сотрудника по ID
+  async getById(id: number) {
+    const { data, error } = await supabase
+      .from('employees')
+      .select('*')
+      .eq('id', id)
+      .single();
+    
+    if (error) throw error;
+    return data as Employee;
+  },
 
   // Создание нового сотрудника
   async create(employee: Omit<Employee, 'id' | 'created_at'>): Promise<Employee> {
@@ -149,18 +161,52 @@ export const settingsApi = {
   // Получить настройки
   async get() {
     try {
-      // Получаем первую запись без использования поля id
+      // Получаем все записи настроек
       const { data, error } = await supabase
         .from('settings')
-        .select('*')
-        .limit(1);
+        .select('*');
       
       if (error) throw error;
-      return data?.[0] || { min_salary: 735, income_tax: 13, fszn_rate: 34, insurance_rate: 0.6 }; // Возвращаем первую запись или значения по умолчанию
+      
+      // Преобразуем массив записей в объект с ключами и значениями
+      const defaultSettings = { 
+        min_salary: 735, 
+        income_tax: 13, 
+        fszn_rate: 34, 
+        insurance_rate: 0.6, 
+        benefit_amount: 50000, 
+        tax_deduction: 5000 
+      };
+      
+      // Если данных нет, возвращаем значения по умолчанию
+      if (!data || data.length === 0) {
+        console.log('No settings found, using defaults:', defaultSettings);
+        return defaultSettings;
+      }
+      
+      // Преобразуем массив записей в объект
+      const settings = {};
+      data.forEach(item => {
+        // Преобразуем строковые значения в числа
+        const numValue = Number(item.value);
+        settings[item.key] = isNaN(numValue) ? item.value : numValue;
+      });
+      
+      console.log('Settings loaded from database:', settings);
+      
+      // Объединяем с значениями по умолчанию, чтобы гарантировать наличие всех необходимых полей
+      return { ...defaultSettings, ...settings };
     } catch (error) {
       console.error('Error fetching settings:', error);
       // Return default values if there's an error
-      return { min_salary: 735, income_tax: 13, fszn_rate: 34, insurance_rate: 0.6 };
+      return { 
+        min_salary: 735, 
+        income_tax: 13, 
+        fszn_rate: 34, 
+        insurance_rate: 0.6, 
+        benefit_amount: 50000, 
+        tax_deduction: 5000 
+      };
     }
   },
   
@@ -274,6 +320,19 @@ export const payrollsApi = {
     
     if (error && error.code !== 'PGRST116') throw error; // PGRST116 - не найдено
     return data as PayrollWithEmployee | null;
+  },
+  
+  // Получить все начисления зарплаты для конкретного сотрудника
+  async getByEmployeeId(employeeId: number) {
+    const { data, error } = await supabase
+      .from('payrolls')
+      .select('*')
+      .eq('employee_id', employeeId)
+      .order('year', { ascending: false })
+      .order('month', { ascending: false });
+    
+    if (error) throw error;
+    return data as Payroll[] || [];
   },
   
   // Создать или обновить начисление зарплаты

@@ -101,12 +101,6 @@ export function PayrollDialog({
   
   // Обновляем значения формы при изменении payroll
   useEffect(() => {
-    console.log('PayrollDialog initialized with tax benefit parameters:', { 
-      benefitAmount, 
-      taxDeduction,
-      incomeTaxRate
-    });
-    
     if (payroll) {
       form.reset({
         worked_hours: payroll.worked_hours !== undefined ? payroll.worked_hours : 0,
@@ -116,15 +110,12 @@ export function PayrollDialog({
         other_deductions: payroll.other_deductions !== undefined ? payroll.other_deductions : 0,
       });
       
+      // Обновляем расчетные значения
       const salaryAccrued = calculateSalaryAccrued(payroll.worked_hours || 0);
       const totalAccrued = roundToTwoDecimals(
         salaryAccrued + (payroll.bonus || 0) + (payroll.extra_pay || 0)
       );
-      
-      // Используем функцию calculateIncomeTax с учетом льготы
-      const { tax: incomeTaxAmount, isTaxBenefitApplied } = calculateIncomeTax(totalAccrued);
-      const incomeTax = roundToTwoDecimals(incomeTaxAmount);
-      
+      const incomeTax = roundToTwoDecimals(totalAccrued * (incomeTaxRate / 100));
       const pensionTax = roundToTwoDecimals(totalAccrued * 0.01);
       const totalDeductions = roundToTwoDecimals(
         incomeTax + pensionTax + (payroll.other_deductions || 0)
@@ -137,12 +128,6 @@ export function PayrollDialog({
         totalPayable + fsznTax + insuranceTax
       );
       
-      console.log('Initial calculation with payroll data:', {
-        totalAccrued,
-        incomeTax,
-        isTaxBenefitApplied
-      });
-      
       setCalculatedValues({
         salaryAccrued,
         totalAccrued,
@@ -153,8 +138,7 @@ export function PayrollDialog({
         payableWithoutSalary,
         fsznTax,
         insuranceTax,
-        totalEmployeeCost,
-        isTaxBenefitApplied
+        totalEmployeeCost
       });
     }
   }, [payroll, fsznRate, insuranceRate, incomeTaxRate]);
@@ -173,23 +157,15 @@ export function PayrollDialog({
     let taxableAmount = amount;
     let isTaxBenefitApplied = false;
     
-    console.log('calculateIncomeTax:', { amount, benefitAmount, taxDeduction });
-    
     if (amount < benefitAmount) {
       taxableAmount = Math.max(0, amount - taxDeduction);
       isTaxBenefitApplied = true;
-      console.log('Tax benefit applied:', { taxableAmount, isTaxBenefitApplied });
-    } else {
-      console.log('Tax benefit NOT applied, amount >= benefitAmount');
     }
     
-    const result = {
+    return {
       tax: taxableAmount * (incomeTaxRate / 100),
       isTaxBenefitApplied
     };
-    
-    console.log('Income tax calculation result:', result);
-    return result;
   };
 
   // Calculate pension tax (1% of total accrued)
@@ -220,10 +196,8 @@ export function PayrollDialog({
       const totalAccrued = roundToTwoDecimals(salaryAccrued + bonus + extraPay);
       
       // Calculate income tax with tax benefit rule
-      console.log('Before calculating income tax:', { totalAccrued });
       const { tax: incomeTaxAmount, isTaxBenefitApplied } = calculateIncomeTax(totalAccrued);
       const incomeTax = roundToTwoDecimals(incomeTaxAmount);
-      console.log('After calculating income tax:', { incomeTaxAmount, incomeTax, isTaxBenefitApplied });
       
       const pensionTax = roundToTwoDecimals(calculatePensionTax(totalAccrued));
       const totalDeductions = roundToTwoDecimals(incomeTax + pensionTax + otherDeductions); // Exclude advance payment from deductions
@@ -244,8 +218,7 @@ export function PayrollDialog({
         payableWithoutSalary,
         fsznTax,
         insuranceTax,
-        totalEmployeeCost,
-        isTaxBenefitApplied
+        totalEmployeeCost
       });
     });
     
@@ -261,7 +234,6 @@ export function PayrollDialog({
     const totalAccrued = salaryAccrued + bonus + extraPay;
     
     // Calculate income tax with tax benefit rule
-    console.log('Before calculating income tax:', { totalAccrued, benefitAmount, taxDeduction });
     const { tax: incomeTaxAmount, isTaxBenefitApplied } = calculateIncomeTax(totalAccrued);
     const incomeTax = incomeTaxAmount;
     
@@ -283,8 +255,7 @@ export function PayrollDialog({
       payableWithoutSalary,
       fsznTax,
       insuranceTax,
-      totalEmployeeCost,
-      isTaxBenefitApplied
+      totalEmployeeCost
     });
     
     return () => subscription.unsubscribe();
@@ -437,31 +408,31 @@ export function PayrollDialog({
             
             {/* Calculations Summary */}
             <div className="space-y-3">
-              <div className="space-y-0">
-                <div className="flex justify-between text-sm py-2 border-b">
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Начислено по окладу:</span>
                   <span>{formatCurrency(calculatedValues.salaryAccrued)}</span>
                 </div>
-                <div className="flex justify-between text-sm py-2 border-b">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Премия:</span>
                   <span>{formatCurrency(Number(form.getValues().bonus || 0))}</span>
                 </div>
-                <div className="flex justify-between text-sm py-2 border-b">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Доплата:</span>
                   <span>{formatCurrency(Number(form.getValues().extra_pay || 0))}</span>
                 </div>
-                <div className="flex justify-between text-sm py-2 border-b">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Аванс:</span>
                   <span>{formatCurrency(Number(form.getValues().advance_payment || 0))}</span>
                 </div>
-                <div className="flex justify-between font-semibold py-2 border-b bg-muted/30">
+                <div className="flex justify-between font-semibold pt-2 border-t">
                   <span>ВСЕГО НАЧИСЛЕНО:</span>
                   <span>{formatCurrency(calculatedValues.totalAccrued)}</span>
                 </div>
               </div>
               
-              <div className="space-y-0 pt-4">
-                <div className="flex justify-between text-sm py-2 border-b">
+              <div className="space-y-1.5 pt-2">
+                <div className="flex justify-between text-sm">
                   <div>
                     <span className="text-muted-foreground">Подоходный налог ({incomeTaxRate}%):</span>
                     {calculatedValues.isTaxBenefitApplied && (
@@ -472,41 +443,41 @@ export function PayrollDialog({
                   </div>
                   {formatCurrency(calculatedValues.incomeTax)}
                 </div>
-                <div className="flex justify-between text-sm py-2 border-b">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Пенсионный взнос (1%):</span>
                   <span>{formatCurrency(calculatedValues.pensionTax)}</span>
                 </div>
-                <div className="flex justify-between text-sm py-2 border-b">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Прочие удержания:</span>
                   <span>{formatCurrency(Number(form.getValues().other_deductions || 0))}</span>
                 </div>
-                <div className="flex justify-between font-semibold py-2 border-b bg-muted/30">
+                <div className="flex justify-between font-semibold pt-2 border-t">
                   <span>ВСЕГО УДЕРЖАНО:</span>
                   <span>{formatCurrency(calculatedValues.totalDeductions)}</span>
                 </div>
               </div>
               
-              <div className="flex justify-between text-lg font-bold py-3 border-y-2 mt-4 bg-muted/40">
+              <div className="flex justify-between text-lg font-bold pt-3 border-t-2">
                 <span>К ВЫДАЧЕ:</span>
                 <span className="text-primary">{formatCurrency(calculatedValues.totalPayable)}</span>
               </div>
               
-              <div className="flex justify-between font-semibold py-2 border-b">
+              <div className="flex justify-between font-semibold pt-2">
                 <span>К ВЫДАЧЕ БЕЗ АВАНСА:</span>
                 <span>{formatCurrency(calculatedValues.payableWithoutSalary)}</span>
               </div>
               
-              <div className="space-y-0 pt-4 mt-2 border-t-2">
-                <div className="text-sm font-medium py-2 border-b">Налоги работодателя:</div>
-                <div className="flex justify-between text-sm py-2 border-b">
+              <div className="space-y-1.5 pt-4 mt-2 border-t-2">
+                <div className="text-sm font-medium mb-2">Налоги работодателя:</div>
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">ФСЗН ({fsznRate}%):</span>
                   <span>{formatCurrency(calculatedValues.fsznTax)}</span>
                 </div>
-                <div className="flex justify-between text-sm py-2 border-b">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Страховой взнос ({insuranceRate}%):</span>
                   <span>{formatCurrency(calculatedValues.insuranceTax)}</span>
                 </div>
-                <div className="flex justify-between font-semibold py-2 border-b bg-muted/30">
+                <div className="flex justify-between font-semibold pt-2 border-t">
                   <span>Стоимость сотрудника:</span>
                   <span>{formatCurrency(calculatedValues.totalEmployeeCost)}</span>
                 </div>
