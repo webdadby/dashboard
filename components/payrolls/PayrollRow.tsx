@@ -19,6 +19,12 @@ export function PayrollRow({
   const salaryAccrued = roundToTwoDecimals(payroll?.salary_accrued || 0);
   const bonus = roundToTwoDecimals(payroll?.bonus || 0);
   const extraPay = roundToTwoDecimals(payroll?.extra_pay || 0);
+  
+  // New fields for vacation and sick leave
+  const vacationPayCurrent = roundToTwoDecimals(payroll?.vacation_pay_current || 0);
+  const vacationPayNext = roundToTwoDecimals(payroll?.vacation_pay_next || 0);
+  const sickLeavePayment = roundToTwoDecimals(payroll?.sick_leave_payment || 0);
+  
   const totalAccrued = roundToTwoDecimals(payroll?.total_accrued || 0);
   
   // Use tax values from the database
@@ -28,8 +34,8 @@ export function PayrollRow({
   const otherDeductions = roundToTwoDecimals(payroll?.other_deductions || 0);
   const totalDeductions = roundToTwoDecimals(payroll?.total_deductions || 0);
   const totalPayable = roundToTwoDecimals(payroll?.total_payable || 0);
-  // Переименовано из payableWithoutSalary в payableWithoutAdvance
-  // Формула: К ВЫДАЧЕ - АВАНС (т.е. сумма, которая осталась к выдаче после вычета аванса)
+  
+  // Payable without advance (amount remaining after advance payment deduction)
   const payableWithoutAdvance = roundToTwoDecimals(payroll?.payable_without_salary || (totalPayable - advancePayment));
 
   return (
@@ -41,6 +47,9 @@ export function PayrollRow({
       <td className="border-r text-center">{formatCurrency(salaryAccrued)}</td>
       <td className="border-r text-center">{formatCurrency(bonus)}</td>
       <td className="border-r text-center">{formatCurrency(extraPay)}</td>
+      <td className="border-r text-center">{formatCurrency(vacationPayCurrent)}</td>
+      <td className="border-r text-center">{formatCurrency(vacationPayNext)}</td>
+      <td className="border-r text-center">{formatCurrency(sickLeavePayment)}</td>
       <td className="border-r text-center font-semibold bg-muted/20">{formatCurrency(totalAccrued)}</td>
       <td className="border-r text-center">{formatCurrency(incomeTax)}</td>
       <td className="border-r text-center">{formatCurrency(pensionTax)}</td>

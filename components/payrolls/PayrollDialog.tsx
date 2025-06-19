@@ -1,19 +1,15 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { timesheetsApi } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+import { CustomDialog } from '@/components/custom-dialog';
 import {
   Form,
   FormControl,
@@ -43,6 +39,7 @@ export function PayrollDialog({
   onSave,
 }: PayrollDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingWorkedDays, setIsLoadingWorkedDays] = useState(false);
   // Remove individual state setters since we'll calculate everything reactively
   const [calculatedValues, setCalculatedValues] = useState({
     salaryAccrued: 0,
@@ -59,7 +56,93 @@ export function PayrollDialog({
   });
 
   // Get employee's salary - use base_salary if set, otherwise calculate from rate and minSalary
-  const fullSalary = employee.base_salary !== undefined ? employee.base_salary : (employee.rate * minSalary) || 0;
+  const fullSalary = employee.base_salary || 0;
+  
+  // Получаем отработанные дни из табеля
+  const fetchWorkedDaysFromTimesheet = useCallback(async () => {
+    if (!employee?.id) return 0;
+    
+    setIsLoadingWorkedDays(true);
+    try {
+      // Получаем начало и конец месяца
+      const startDate = format(startOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
+      const endDate = format(endOfMonth(new Date(year, month - 1)), 'yyyy-MM-dd');
+      
+      // Получаем дату увольнения сотрудника, если есть
+      const terminationDate = employee.termination_date 
+        ? new Date(employee.termination_date) 
+        : null;
+      
+      console.log('Получение данных табеля за период:', { 
+        employeeId: employee.id, 
+        startDate, 
+        endDate,
+        terminationDate,
+        month,
+        year
+      });
+      
+      // Получаем записи табеля за месяц
+      const timesheetEntries = await timesheetsApi.getByEmployeeAndDateRange(
+        employee.id,
+        startDate,
+        endDate
+      );
+      
+      console.log('Получены записи табеля:', {
+        totalEntries: timesheetEntries.length,
+        entries: timesheetEntries.map(e => ({
+          id: e.id,
+          date: e.work_date,
+          status: e.status,
+        }))
+      });
+      
+      // Создаем карту для хранения статусов по датам (с приоритетом 'work')
+      const dayStatusMap = new Map<string, string>();
+      
+      // Обрабатываем все записи, сохраняя статус 'work' при его наличии
+      timesheetEntries.forEach(entry => {
+        const entryDate = new Date(entry.work_date);
+        
+        // Пропускаем дни после увольнения
+        if (terminationDate && entryDate > terminationDate) {
+          return;
+        }
+        
+        // Сохраняем статус, если его еще нет или если это 'work'
+        if (!dayStatusMap.has(entry.work_date) || entry.status === 'work') {
+          dayStatusMap.set(entry.work_date, entry.status);
+        }
+      });
+      
+      // Считаем только дни со статусом 'work'
+      let workedDays = 0;
+      dayStatusMap.forEach((status, date) => {
+        if (status === 'work') {
+          workedDays++;
+        }
+      });
+      
+      console.log('Расчет отработанных дней:', {
+        totalDays: dayStatusMap.size,
+        workedDays,
+        statusDistribution: Array.from(dayStatusMap.entries()).reduce((acc, [date, status]) => {
+          acc[status] = (acc[status] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>),
+        terminationDate: terminationDate?.toISOString()
+      });
+      
+      console.log(`Найдено ${workedDays} отработанных дней в табеле за ${month}.${year}`);
+      return workedDays;
+    } catch (error) {
+      console.error('Error fetching timesheet data:', error);
+      return 0;
+    } finally {
+      setIsLoadingWorkedDays(false);
+    }
+  }, [employee?.id, year, month]);
   
   // Calculate default advance payment as 40% of salary
   const defaultAdvancePayment = payroll?.advance_payment !== undefined ? payroll.advance_payment : Math.round(fullSalary * 0.4);
@@ -68,7 +151,7 @@ export function PayrollDialog({
   const form = useForm<PayrollFormValues>({
     resolver: zodResolver(
       z.object({
-        worked_hours: z.preprocess(
+        worked_days: z.preprocess(
           (val: unknown) => (val === '' ? 0 : Number(String(val).replace(',', '.'))),
           z.number().min(0, 'Значение должно быть положительным')
         ),
@@ -77,6 +160,18 @@ export function PayrollDialog({
           z.number().min(0, 'Значение должно быть положительным')
         ),
         extra_pay: z.preprocess(
+          (val: unknown) => (val === '' ? 0 : Number(String(val).replace(',', '.'))),
+          z.number().min(0, 'Значение должно быть положительным')
+        ),
+        vacation_pay_current: z.preprocess(
+          (val: unknown) => (val === '' ? 0 : Number(String(val).replace(',', '.'))),
+          z.number().min(0, 'Значение должно быть положительным')
+        ),
+        vacation_pay_next: z.preprocess(
+          (val: unknown) => (val === '' ? 0 : Number(String(val).replace(',', '.'))),
+          z.number().min(0, 'Значение должно быть положительным')
+        ),
+        sick_leave_payment: z.preprocess(
           (val: unknown) => (val === '' ? 0 : Number(String(val).replace(',', '.'))),
           z.number().min(0, 'Значение должно быть положительным')
         ),
@@ -91,13 +186,29 @@ export function PayrollDialog({
       })
     ),
     defaultValues: {
-      worked_hours: payroll?.worked_hours !== undefined ? payroll.worked_hours : 0,
+      worked_days: payroll?.worked_days !== undefined ? payroll.worked_days : workNorm?.working_days || 0,
       bonus: payroll?.bonus !== undefined ? payroll.bonus : 0,
       extra_pay: payroll?.extra_pay !== undefined ? payroll.extra_pay : 0,
+      vacation_pay_current: payroll?.vacation_pay_current !== undefined ? payroll.vacation_pay_current : 0,
+      vacation_pay_next: payroll?.vacation_pay_next !== undefined ? payroll.vacation_pay_next : 0,
+      sick_leave_payment: payroll?.sick_leave_payment !== undefined ? payroll.sick_leave_payment : 0,
       advance_payment: payroll?.advance_payment !== undefined ? payroll.advance_payment : defaultAdvancePayment,
       other_deductions: payroll?.other_deductions !== undefined ? payroll.other_deductions : 0,
     },
   });
+  
+  // Fetch worked days when component mounts or when employee/month/year changes
+  useEffect(() => {
+    const loadWorkedDays = async () => {
+      const days = await fetchWorkedDaysFromTimesheet();
+      // Only update if we're not editing an existing payroll
+      if (!payroll?.id) {
+        form.setValue('worked_days', days);
+      }
+    };
+    
+    loadWorkedDays();
+  }, [fetchWorkedDaysFromTimesheet, payroll?.id, form]);
   
   // Обновляем значения формы при изменении payroll
   useEffect(() => {
@@ -109,14 +220,17 @@ export function PayrollDialog({
     
     if (payroll) {
       form.reset({
-        worked_hours: payroll.worked_hours !== undefined ? payroll.worked_hours : 0,
+        worked_days: payroll.worked_days !== undefined ? payroll.worked_days : workNorm?.working_days || 0,
         bonus: payroll.bonus !== undefined ? payroll.bonus : 0,
         extra_pay: payroll.extra_pay !== undefined ? payroll.extra_pay : 0,
+        vacation_pay_current: payroll.vacation_pay_current !== undefined ? payroll.vacation_pay_current : 0,
+        vacation_pay_next: payroll.vacation_pay_next !== undefined ? payroll.vacation_pay_next : 0,
+        sick_leave_payment: payroll.sick_leave_payment !== undefined ? payroll.sick_leave_payment : 0,
         advance_payment: payroll.advance_payment !== undefined ? payroll.advance_payment : defaultAdvancePayment,
         other_deductions: payroll.other_deductions !== undefined ? payroll.other_deductions : 0,
       });
       
-      const salaryAccrued = calculateSalaryAccrued(payroll.worked_hours || 0);
+      const salaryAccrued = calculateSalaryAccrued(payroll.worked_days || 0);
       const totalAccrued = roundToTwoDecimals(
         salaryAccrued + (payroll.bonus || 0) + (payroll.extra_pay || 0)
       );
@@ -159,32 +273,69 @@ export function PayrollDialog({
     }
   }, [payroll, fsznRate, insuranceRate, incomeTaxRate]);
 
-  // Calculate salary accrued based on worked hours and norm
-  const calculateSalaryAccrued = (hours: number) => {
-    if (!workNorm?.norm_hours || workNorm.norm_hours <= 0) return 0;
-    const fullSalary = employee.base_salary !== undefined ? employee.base_salary : (employee.rate * minSalary);
-    return (fullSalary / workNorm.norm_hours) * hours;
+  // Calculate salary accrued based on worked days and working days in month
+  const calculateSalaryAccrued = (workedDays: number) => {
+    // Get the employee's base salary (required field)
+    if (employee.base_salary === undefined || employee.base_salary <= 0) {
+      console.error('Base salary is not set for employee:', employee.id);
+      return 0;
+    }
+    
+    // Get working days and holiday days from workNorm (required fields)
+    if (!workNorm?.working_days) {
+      console.error('Working days norm is not set for the period');
+      return 0;
+    }
+    
+    // Total working days includes all working days (including pre-holiday days) plus holiday days
+    // Pre-holiday days are already included in working_days
+    const totalWorkingDays = workNorm.working_days + (workNorm.holiday_days || 0);
+    const dailyRate = employee.base_salary / totalWorkingDays;
+    const calculatedSalary = dailyRate * workedDays;
+    
+    console.log('Salary calculation:', {
+      baseSalary: employee.base_salary,
+      workingDays: workNorm.working_days, // Already includes pre-holiday days
+      holidayDays: workNorm.holiday_days || 0,
+      totalWorkingDays,
+      workedDays,
+      dailyRate,
+      calculatedSalary
+    });
+    
+    return roundToTwoDecimals(calculatedSalary);
   };
 
   // Calculate income tax with tax benefit rule
   const calculateIncomeTax = (amount: number) => {
-    // Apply tax benefit rule: if total accrued is less than benefit amount threshold,
-    // subtract the tax deduction before calculating income tax
+    console.log('calculateIncomeTax:', { amount, benefitAmount, taxDeduction });
+    
     let taxableAmount = amount;
     let isTaxBenefitApplied = false;
     
-    console.log('calculateIncomeTax:', { amount, benefitAmount, taxDeduction });
-    
+    // Apply tax benefit only if the amount is below the benefit threshold
     if (amount < benefitAmount) {
-      taxableAmount = Math.max(0, amount - taxDeduction);
+      // Only apply the tax deduction to the amount that's below the threshold
+      const amountBelowThreshold = amount;
+      taxableAmount = Math.max(0, amountBelowThreshold - taxDeduction);
       isTaxBenefitApplied = true;
-      console.log('Tax benefit applied:', { taxableAmount, isTaxBenefitApplied });
+      console.log('Tax benefit applied:', { 
+        amountBelowThreshold,
+        taxDeduction,
+        taxableAmount,
+        isTaxBenefitApplied 
+      });
     } else {
+      // If above threshold, the full amount is taxable
+      taxableAmount = amount;
       console.log('Tax benefit NOT applied, amount >= benefitAmount');
     }
     
+    // Calculate the tax
+    const tax = taxableAmount * (incomeTaxRate / 100);
+    
     const result = {
-      tax: taxableAmount * (incomeTaxRate / 100),
+      tax: roundToTwoDecimals(tax),
       isTaxBenefitApplied
     };
     
@@ -205,19 +356,24 @@ export function PayrollDialog({
   useEffect(() => {
     const subscription = form.watch((value, { name }) => {
       // Only recalculate if relevant fields change
-      if (name && !['worked_hours', 'bonus', 'extra_pay', 'advance_payment', 'other_deductions'].includes(name)) {
+      if (name && !['worked_days', 'bonus', 'extra_pay', 'advance_payment', 'other_deductions'].includes(name)) {
         return;
       }
       
       const formValues = form.getValues();
-      const workedHours = Number(formValues.worked_hours || 0);
+      const workedDays = Number(formValues.worked_days || 0);
       const bonus = Number(formValues.bonus || 0);
       const extraPay = Number(formValues.extra_pay || 0);
       const advancePayment = Number(formValues.advance_payment || 0);
       const otherDeductions = Number(formValues.other_deductions || 0);
       
-      const salaryAccrued = roundToTwoDecimals(calculateSalaryAccrued(workedHours));
-      const totalAccrued = roundToTwoDecimals(salaryAccrued + bonus + extraPay);
+      const salaryAccrued = roundToTwoDecimals(calculateSalaryAccrued(workedDays));
+      const vacationPayCurrent = Number(formValues.vacation_pay_current || 0);
+      const vacationPayNext = Number(formValues.vacation_pay_next || 0);
+      const sickLeavePayment = Number(formValues.sick_leave_payment || 0);
+      const totalAccrued = roundToTwoDecimals(
+        salaryAccrued + bonus + extraPay + vacationPayCurrent + vacationPayNext + sickLeavePayment
+      );
       
       // Calculate income tax with tax benefit rule
       console.log('Before calculating income tax:', { totalAccrued });
@@ -232,7 +388,9 @@ export function PayrollDialog({
       const payableWithoutSalary = roundToTwoDecimals(totalPayable - advancePayment);
       const fsznTax = roundToTwoDecimals(calculateFsznTax(totalAccrued));
       const insuranceTax = roundToTwoDecimals(calculateInsuranceTax(totalAccrued));
-      const totalEmployeeCost = roundToTwoDecimals(totalPayable + fsznTax + insuranceTax);
+      const totalEmployeeCost = roundToTwoDecimals(
+        totalPayable + fsznTax + insuranceTax
+      );
       
       setCalculatedValues({
         salaryAccrued,
@@ -251,13 +409,13 @@ export function PayrollDialog({
     
     // Initial calculation
     const formValues = form.getValues();
-    const workedHours = Number(formValues.worked_hours || 0);
+    const workedDays = Number(formValues.worked_days || 0);
     const bonus = Number(formValues.bonus || 0);
     const extraPay = Number(formValues.extra_pay || 0);
     const advancePayment = Number(formValues.advance_payment || 0);
     const otherDeductions = Number(formValues.other_deductions || 0);
     
-    const salaryAccrued = calculateSalaryAccrued(workedHours);
+    const salaryAccrued = calculateSalaryAccrued(workedDays);
     const totalAccrued = salaryAccrued + bonus + extraPay;
     
     // Calculate income tax with tax benefit rule
@@ -295,7 +453,7 @@ export function PayrollDialog({
     setIsSubmitting(true);
     try {
       // Получаем оклад сотрудника
-      const salary = employee.base_salary !== undefined ? employee.base_salary : (employee.rate * minSalary);
+      const salary = employee.base_salary || 0;
       
       // Создаем объект с всеми данными для сохранения
       const payrollData = {
@@ -305,9 +463,12 @@ export function PayrollDialog({
         month,
         
         // Данные из формы
-        worked_hours: Number(data.worked_hours),
+        worked_days: Number(data.worked_days),
         bonus: Number(data.bonus || 0),
         extra_pay: Number(data.extra_pay || 0),
+        vacation_pay_current: Number(data.vacation_pay_current || 0),
+        vacation_pay_next: Number(data.vacation_pay_next || 0),
+        sick_leave_payment: Number(data.sick_leave_payment || 0),
         advance_payment: Number(data.advance_payment || 0),
         other_deductions: Number(data.other_deductions || 0),
         
@@ -359,15 +520,22 @@ export function PayrollDialog({
     </FormItem>
   );
 
+  const dialogTitle = (
+    <div>
+      <div className="text-lg sm:text-xl">Начисление зарплаты</div>
+      <div className="text-sm text-muted-foreground">
+        {employee.name} • {new Date(year, month - 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
+      </div>
+    </div>
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto sm:max-h-[90vh] sm:overflow-y-auto">
-        <DialogHeader className="sticky top-0 bg-background z-10 pb-2 border-b">
-          <DialogTitle className="text-lg sm:text-xl">Начисление зарплаты</DialogTitle>
-          <div className="text-sm text-muted-foreground">
-            {employee.name} • {new Date(year, month - 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' })}
-          </div>
-        </DialogHeader>
+    <CustomDialog 
+      open={open} 
+      onClose={() => onOpenChange(false)}
+      title={dialogTitle}
+    >
+      <div className="w-full max-w-4xl max-h-[80vh] overflow-y-auto">
         
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
@@ -375,22 +543,20 @@ export function PayrollDialog({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4 bg-muted/30 rounded-lg">
               <div className="space-y-1">
                 <div className="text-sm font-medium text-muted-foreground">Оклад сотрудника</div>
-                <div className="text-2xl font-bold text-primary">{formatCurrency(fullSalary)}</div>
-                {employee.base_salary !== undefined ? (
-                  <div className="text-sm text-muted-foreground">
-                    {formatCurrency(calculatedValues.incomeTax)}
-                  </div>
-                ) : (
-                  <div className="text-xs text-muted-foreground">
-                    Рассчитано: {employee.rate} × {formatCurrency(minSalary)}
-                  </div>
-                )}
+                <div className="text-2xl font-bold text-primary">
+                  {employee.base_salary !== undefined ? formatCurrency(employee.base_salary) : formatCurrency(0)}
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {formatCurrency(calculatedValues.incomeTax)}
+                </div>
               </div>
               <div className="space-y-1">
-                <div className="text-sm font-medium text-muted-foreground">Норма часов</div>
-                <div className="text-2xl font-bold">{workNorm?.norm_hours || 'Не установлена'}</div>
+                <div className="text-sm font-medium text-muted-foreground">Рабочие дни</div>
+                <div className="text-2xl font-bold">
+                  {workNorm ? (workNorm.working_days + (workNorm.holiday_days || 0)) : '—'}
+                </div>
                 <div className="text-xs text-muted-foreground">
-                  {workNorm?.norm_hours ? `${workNorm.norm_hours} ч/мес` : 'Установите норму часов'}
+                  {workNorm?.holiday_days ? `${workNorm.holiday_days} предпраздничных` : 'Нет данных'}
                 </div>
               </div>
               <div className="space-y-1">
@@ -406,11 +572,26 @@ export function PayrollDialog({
             
             {/* Input Fields */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <FormField
-                control={form.control}
-                name="worked_hours"
-                render={({ field }) => renderInputField(field, 'worked_hours', 'Отработано часов', 'number')}
-              />
+              <div className="relative">
+                <FormField
+                  control={form.control}
+                  name="worked_days"
+                  render={({ field }) => renderInputField(
+                    {
+                      ...field,
+                      disabled: isLoadingWorkedDays
+                    }, 
+                    'worked_days', 
+                    'Отработано дней', 
+                    'number'
+                  )}
+                />
+                {isLoadingWorkedDays && (
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2">
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                  </div>
+                )}
+              </div>
               <FormField
                 control={form.control}
                 name="bonus"
@@ -420,6 +601,21 @@ export function PayrollDialog({
                 control={form.control}
                 name="extra_pay"
                 render={({ field }) => renderInputField(field, 'extra_pay', 'Доплата', 'number')}
+              />
+              <FormField
+                control={form.control}
+                name="vacation_pay_current"
+                render={({ field }) => renderInputField(field, 'vacation_pay_current', 'Отпускные тек. мес.', 'number')}
+              />
+              <FormField
+                control={form.control}
+                name="vacation_pay_next"
+                render={({ field }) => renderInputField(field, 'vacation_pay_next', 'Отпускные след. мес.', 'number')}
+              />
+              <FormField
+                control={form.control}
+                name="sick_leave_payment"
+                render={({ field }) => renderInputField(field, 'sick_leave_payment', 'Больничный', 'number')}
               />
               <FormField
                 control={form.control}
@@ -449,6 +645,18 @@ export function PayrollDialog({
                 <div className="flex justify-between text-sm py-2 border-b">
                   <span className="text-muted-foreground">Доплата:</span>
                   <span>{formatCurrency(Number(form.getValues().extra_pay || 0))}</span>
+                </div>
+                <div className="flex justify-between text-sm py-2 border-b">
+                  <span className="text-muted-foreground">Отпускные тек. мес.:</span>
+                  <span>{formatCurrency(Number(form.getValues().vacation_pay_current || 0))}</span>
+                </div>
+                <div className="flex justify-between text-sm py-2 border-b">
+                  <span className="text-muted-foreground">Отпускные след. мес.:</span>
+                  <span>{formatCurrency(Number(form.getValues().vacation_pay_next || 0))}</span>
+                </div>
+                <div className="flex justify-between text-sm py-2 border-b">
+                  <span className="text-muted-foreground">Больничный:</span>
+                  <span>{formatCurrency(Number(form.getValues().sick_leave_payment || 0))}</span>
                 </div>
                 <div className="flex justify-between text-sm py-2 border-b">
                   <span className="text-muted-foreground">Аванс:</span>
@@ -513,8 +721,8 @@ export function PayrollDialog({
               </div>
             </div>
 
-            {/* Footer Buttons */}
-            <DialogFooter className="sticky bottom-0 bg-background pt-4 pb-1 -mx-6 px-6 border-t">
+            {/* Form Actions */}
+            <div className="sticky bottom-0 bg-background pt-4 pb-1 -mx-6 px-6 border-t">
               <div className="flex w-full flex-col-reverse sm:flex-row sm:justify-end sm:space-x-3 space-y-2 sm:space-y-0">
                 <Button 
                   type="button" 
@@ -533,10 +741,10 @@ export function PayrollDialog({
                   {isSubmitting ? 'Сохранение...' : 'Сохранить'}
                 </Button>
               </div>
-            </DialogFooter>
+            </div>
           </form>
         </Form>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </CustomDialog>
   );
 }

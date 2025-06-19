@@ -15,6 +15,8 @@ import {
   Settings,
   HelpCircle,
   Menu,
+  CalendarDays,
+  CalendarCheck2,
 } from "lucide-react"
 
 import { Home } from "lucide-react"
@@ -124,11 +126,17 @@ export default function Sidebar() {
                   Finance
                 </div>
                 <div className="space-y-1">
-                  <NavItem href="#" icon={Wallet}>
+                  {/* <NavItem href="#" icon={Wallet}>
                     Transactions
-                  </NavItem>
+                  </NavItem> */}
                   <NavItem href="/payrolls" icon={Receipt}>
                     Зарплата
+                  </NavItem>
+                  <NavItem href="/vacations" icon={CalendarDays}>
+                    Отпуска
+                  </NavItem>
+                  <NavItem href="/timesheets" icon={CalendarCheck2}>
+                    Табель учета
                   </NavItem>
                   <NavItem href="#" icon={CreditCard}>
                     Payments

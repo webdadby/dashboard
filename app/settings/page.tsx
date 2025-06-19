@@ -22,6 +22,7 @@ const settingsSchema = z.object({
   insurance_rate: z.number().min(0, "Insurance rate cannot be negative").max(100, "Insurance rate cannot be more than 100%"),
   benefit_amount: z.number().min(0, "Benefit amount cannot be negative"),
   tax_deduction: z.number().min(0, "Tax deduction cannot be negative"),
+  salary_payment_day: z.number().min(1, "Payment day must be at least 1").max(31, "Payment day cannot be more than 31"),
 });
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
@@ -49,6 +50,7 @@ function SettingsPageContent() {
       insurance_rate: 0.6,
       benefit_amount: 0,
       tax_deduction: 0,
+      salary_payment_day: 5, // Default to 5th of the month
     },
   });
 
@@ -66,9 +68,8 @@ function SettingsPageContent() {
           // Convert settings array to form object
           const settingsObj: Partial<SettingsFormValues> = {};
           data.forEach((setting: Setting) => {
-            if (setting.key === 'min_salary' || setting.key === 'income_tax' || 
-                setting.key === 'fszn_rate' || setting.key === 'insurance_rate' ||
-                setting.key === 'benefit_amount' || setting.key === 'tax_deduction') {
+            if (['min_salary', 'income_tax', 'fszn_rate', 'insurance_rate', 
+                 'benefit_amount', 'tax_deduction', 'salary_payment_day'].includes(setting.key)) {
               settingsObj[setting.key as keyof SettingsFormValues] = setting.value;
             }
           });
@@ -139,6 +140,14 @@ function SettingsPageContent() {
         .select();
 
       if (taxDeductionError) throw taxDeductionError;
+      
+      // Update or insert salary payment day
+      const { error: paymentDayError } = await supabase
+        .from("settings")
+        .upsert({ key: "salary_payment_day", value: data.salary_payment_day })
+        .select();
+
+      if (paymentDayError) throw paymentDayError;
 
       toast.success("Settings saved successfully");
     } catch (error) {
@@ -295,8 +304,9 @@ function SettingsPageContent() {
                   </p>
                 )}
               </div>
+              
               <div className="space-y-2">
-                <Label htmlFor="tax_deduction">Налоговый вычет (RUB)</Label>
+                <Label htmlFor="tax_deduction">Tax Deduction (RUB)</Label>
                 <Input
                   id="tax_deduction"
                   type="text"
@@ -314,6 +324,27 @@ function SettingsPageContent() {
                 {form.formState.errors.tax_deduction && (
                   <p className="text-sm text-red-500">
                     {form.formState.errors.tax_deduction.message}
+                  </p>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="salary_payment_day">Salary Payment Day</Label>
+                <Input
+                  id="salary_payment_day"
+                  type="number"
+                  min="1"
+                  max="31"
+                  placeholder="5"
+                  {...form.register("salary_payment_day", {
+                    valueAsNumber: true,
+                    min: { value: 1, message: "Day must be at least 1" },
+                    max: { value: 31, message: "Day cannot be more than 31" }
+                  })}
+                />
+                {form.formState.errors.salary_payment_day && (
+                  <p className="text-sm text-red-500">
+                    {form.formState.errors.salary_payment_day.message}
                   </p>
                 )}
               </div>

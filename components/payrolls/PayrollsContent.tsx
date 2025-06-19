@@ -95,6 +95,8 @@ export function PayrollsContent() {
               year: selectedYear,
               month: selectedMonth,
               norm_hours: 168, // Default to 40 hours/week * 4.2 weeks
+              working_days: 20, // Default working days in a month
+              holiday_days: 0,  // Default to no holidays
             });
             console.log('Default work norm created:', workNormData);
           } catch (error) {
@@ -145,6 +147,8 @@ export function PayrollsContent() {
         year: selectedYear,
         month: selectedMonth,
         norm_hours: normHours,
+        working_days: 20, // Default working days in a month
+        holiday_days: 0,  // Default to no holidays
       });
       
       setWorkNorm(updatedWorkNorm);
@@ -248,7 +252,7 @@ export function PayrollsContent() {
 
   return (
     <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex justify-between items-center mb-6 p-4 bg-card">
         <h1 className="text-2xl font-bold">Зарплаты</h1>
         <div className="flex items-center space-x-4">
           <MonthYearSelector

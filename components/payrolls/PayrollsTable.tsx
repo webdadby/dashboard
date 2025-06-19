@@ -22,6 +22,9 @@ export function PayrollsTable({
             <TableHead className="border-r">Начислено по окладу</TableHead>
             <TableHead className="border-r">Премия</TableHead>
             <TableHead className="border-r">Доплата</TableHead>
+            <TableHead className="border-r">Отпуск. тек.</TableHead>
+            <TableHead className="border-r">Отпуск. след.</TableHead>
+            <TableHead className="border-r">Больничный</TableHead>
             <TableHead className="border-r font-bold">ВСЕГО НАЧИС</TableHead>
             <TableHead className="border-r">Подоходный</TableHead>
             <TableHead className="border-r">Пенсионный</TableHead>

@@ -3,11 +3,15 @@ import type { Employee, Payroll, PayrollWithEmployee, WorkNorm } from '@/lib/sup
 export type { Employee, Payroll, PayrollWithEmployee, WorkNorm };
 
 export interface PayrollFormValues {
-  worked_hours: number | null;
+  worked_days: number | null;
   bonus: number;
   extra_pay: number;
+  vacation_pay_current: number;
+  vacation_pay_next: number;
+  sick_leave_payment: number;
   advance_payment: number;
   other_deductions: number;
+  payment_date: string | null;
 }
 
 export interface PayrollDialogProps {
