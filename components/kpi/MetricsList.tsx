@@ -6,16 +6,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Pencil, Trash2, Filter, Loader2 } from 'lucide-react';
 import { KpiMetric, Employee } from './KpiTypes';
-import { createClient } from '@/lib/supabase/client';
+import { supabase } from '@/lib/supabase/client';
 import { kpiMetricsApi, employeeMetricsApi } from '@/lib/supabase/kpi';
 import { useToast } from '@/components/ui/use-toast';
-import { MetricForm } from './MetricForm';
+import MetricForm from './MetricForm';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
-
-const supabase = createClient();
 
 interface MetricsListProps {
   metrics: KpiMetric[];
@@ -55,7 +53,8 @@ export const MetricsList: React.FC<MetricsListProps> = ({ metrics, onRefresh }) 
           .order('name', { ascending: true });
           
         if (employeesError) throw employeesError;
-        setEmployees(employeesData || []);
+        // Convert to unknown first to avoid type mismatch error
+        setEmployees(((employeesData || []) as unknown) as Employee[]);
         
         // Load employee assignments for all metrics
         const assignments: Record<number, Employee[]> = {};
@@ -191,7 +190,7 @@ export const MetricsList: React.FC<MetricsListProps> = ({ metrics, onRefresh }) 
                         className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center space-x-2"
                       >
                         <Avatar className="h-6 w-6">
-                          <AvatarImage src={employee.avatar_url || ''} alt={employee.name} />
+                          <AvatarImage src="" alt={employee.name} />
                           <AvatarFallback>
                             {employee.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                           </AvatarFallback>
@@ -209,7 +208,8 @@ export const MetricsList: React.FC<MetricsListProps> = ({ metrics, onRefresh }) 
               name: '', 
               type: 'tiered', 
               description: '',
-              employee_ids: [] 
+              employee_ids: [],
+              tiers: [{ min_value: 0, max_value: null, rate: 0 }]
             } as KpiMetric)}
           >
             Создать метрику
@@ -259,7 +259,7 @@ export const MetricsList: React.FC<MetricsListProps> = ({ metrics, onRefresh }) 
                     <div className="flex -space-x-2">
                       {employeeAssignments[metric.id!]?.slice(0, 3).map(employee => (
                         <Avatar key={employee.id} className="h-8 w-8 border-2 border-background">
-                          <AvatarImage src={employee.avatar_url || ''} alt={employee.name} />
+                          <AvatarImage src="" alt={employee.name} />
                           <AvatarFallback className="text-xs">
                             {employee.name.split(' ').map(n => n[0]).join('').toUpperCase()}
                           </AvatarFallback>

@@ -18,6 +18,11 @@ export const kpiMetricsApi = {
     // For tiered metrics, fetch their tiers
     const metricsWithTiers = await Promise.all(
       (data || []).map(async (metric) => {
+        // Convert percentage metrics with is_sum_percentage flag to sum_percentage type
+        if (metric.type === 'percentage' && metric.is_sum_percentage) {
+          metric.type = 'sum_percentage';
+        }
+        
         if (metric.type === 'tiered') {
           const { data: tiers } = await supabase
             .from('kpi_metric_tiers')
@@ -45,6 +50,11 @@ export const kpiMetricsApi = {
     if (error) return null;
     if (!data) return null;
 
+    // Convert percentage metrics with is_sum_percentage flag to sum_percentage type
+    if (data.type === 'percentage' && data.is_sum_percentage) {
+      data.type = 'sum_percentage';
+    }
+
     if (data.type === 'tiered') {
       const { data: tiers } = await supabase
         .from('kpi_metric_tiers')
@@ -63,15 +73,20 @@ export const kpiMetricsApi = {
     // Extract employee_ids if they exist
     const { employee_ids, ...metricData } = metric as any;
     
+    // Используем флаг is_sum_percentage, если он уже установлен в метрике
+    // или устанавливаем его, если тип метрики sum_percentage
+    const insertData = {
+      name: metric.name,
+      description: metric.description,
+      type: metric.type === 'sum_percentage' ? 'percentage' : metric.type,
+      base_rate: metric.base_rate,
+      is_sum_percentage: 'is_sum_percentage' in metricData ? metricData.is_sum_percentage : metric.type === 'sum_percentage'
+    };
+    
     // Create the base metric
     const { data: newMetric, error } = await supabase
       .from('kpi_metrics')
-      .insert({
-        name: metric.name,
-        description: metric.description,
-        type: metric.type,
-        base_rate: metric.base_rate,
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -95,7 +110,7 @@ export const kpiMetricsApi = {
 
     // Associate employees with the metric
     if (employee_ids) {
-      const newAssociations = employee_ids.map(employeeId => ({
+      const newAssociations = employee_ids.map((employeeId: number) => ({
         metric_id: newMetric.id,
         employee_id: employeeId
       }));
@@ -121,6 +136,21 @@ export const kpiMetricsApi = {
     // Remove employee_ids if it exists in the updates
     if ('employee_ids' in metricUpdates) {
       delete (metricUpdates as any).employee_ids;
+    }
+    
+    // Преобразуем тип sum_percentage в percentage с флагом is_sum_percentage
+    // Если флаг is_sum_percentage уже установлен в обновлениях, используем его
+    if (updates.type) {
+      if (updates.type === 'sum_percentage') {
+        metricUpdates.type = 'percentage';
+        // Устанавливаем флаг, если он не установлен явно
+        if (!('is_sum_percentage' in metricUpdates)) {
+          metricUpdates.is_sum_percentage = true;
+        }
+      } else if (!('is_sum_percentage' in metricUpdates)) {
+        // Если тип не sum_percentage и флаг не установлен явно, сбрасываем его
+        metricUpdates.is_sum_percentage = false;
+      }
     }
     
     const { data: metric, error: metricError } = await supabase

@@ -12,7 +12,7 @@ export const employeesApi = {
       .order('created_at', { ascending: false });
     
     if (error) throw error;
-    return data || [];
+    return (data || []) as Employee[];
   },
   
   // Получить сотрудника по ID
@@ -29,18 +29,24 @@ export const employeesApi = {
 
   // Создание нового сотрудника
   async create(employee: Omit<Employee, 'id' | 'created_at'>): Promise<Employee> {
+    // Создаем копию объекта employee без tax_identifier
+    const employeeData = { ...employee };
+    if ('tax_identifier' in employeeData) {
+      delete employeeData['tax_identifier'];
+    }
     // Получаем минимальную зарплату из настроек
     const { data: settingsData } = await supabase
       .from('settings')
-      .select('min_salary')
-      .single();
+      .select('*')
+      .eq('key', 'min_salary')
+      .maybeSingle();
     
-    const minSalary = settingsData?.min_salary || 735;
+    const minSalary = settingsData?.value ? Number(settingsData.value) : 735;
     
     // Добавляем base_salary на основе rate и min_salary
     const employeeWithBaseSalary = {
-      ...employee,
-      base_salary: employee.rate * minSalary
+      ...employeeData,
+      base_salary: employeeData.rate * minSalary
     };
     
     const { data, error } = await supabase
@@ -49,7 +55,7 @@ export const employeesApi = {
       .select();
     
     if (error) throw error;
-    return data[0];
+    return data[0] as Employee;
   },
 
   // Обновить данные сотрудника
@@ -79,15 +85,16 @@ export const employeesApi = {
         // Получаем минимальную зарплату из настроек
         const { data: settingsData } = await supabase
           .from('settings')
-          .select('min_salary')
-          .single();
+          .select('*')
+          .eq('key', 'min_salary')
+          .maybeSingle();
         
-        const minSalary = settingsData?.min_salary || 735;
+        const minSalary = settingsData?.value ? Number(settingsData.value) : 735;
         updateData.base_salary = updateData.rate * minSalary;
       }
       
-      // Удаляем tax_identifier, если он пустая строка или undefined
-      if (updateData.tax_identifier === '' || updateData.tax_identifier === undefined) {
+      // Всегда удаляем tax_identifier, так как колонка отсутствует в базе
+      if ('tax_identifier' in updateData) {
         delete updateData.tax_identifier;
       }
       
@@ -117,7 +124,7 @@ export const employeesApi = {
         throw error;
       }
       
-      return data[0];
+      return data[0] as Employee;
     } catch (error) {
       console.error('Error in update employee:', error);
       throw error;
@@ -143,6 +150,6 @@ export const employeesApi = {
       .order('name');
     
     if (error) throw error;
-    return data || [];
+    return (data || []) as Employee[];
   }
 };

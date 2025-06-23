@@ -5,9 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Search, Filter, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { EmployeeKpiCard } from './EmployeeKpiCard';
 import { KpiMetric, Employee } from './KpiTypes';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { format, subMonths, addMonths, formatISO, parseISO } from 'date-fns';
 import { ru } from 'date-fns/locale';
+import { kpiResultsApi, kpiCalculations } from '@/lib/supabase/kpi';
 
 interface ResultsDashboardProps {
   employees: Employee[];
@@ -26,6 +27,8 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
   const [selectedDepartments, setSelectedDepartments] = useState<string[]>([]);
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
   const [expandedMonths, setExpandedMonths] = useState<Record<string, boolean>>({});
+  const [monthlyResults, setMonthlyResults] = useState<Record<string, any[]>>({});
+  const [monthlyTotals, setMonthlyTotals] = useState<Record<string, number>>({});
 
   // Generate 6 months period (current month + 5 previous months)
   const months = useMemo(() => {
@@ -63,6 +66,65 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
       ...prev,
       [monthKey]: !prev[monthKey]
     }));
+  };
+  
+  // Загрузка результатов для всех месяцев
+  useEffect(() => {
+    const loadMonthlyResults = async () => {
+      const results: Record<string, any[]> = {};
+      const totals: Record<string, number> = {};
+      
+      // Загружаем результаты для каждого месяца
+      for (const month of months) {
+        try {
+          // Загружаем все результаты за период
+          const periodResults = await kpiResultsApi.getByPeriod(month.key);
+          results[month.key] = periodResults;
+          
+          // Рассчитываем общую сумму премий за месяц
+          let totalBonus = 0;
+          
+          // Создаем карту метрик для быстрого поиска
+          const metricsMap = new Map(metrics.map(m => [m.id, m]));
+          
+          // Рассчитываем бонус для каждого результата
+          periodResults.forEach(result => {
+            const metric = metricsMap.get(result.metric_id);
+            if (!metric) return;
+            
+            // Рассчитываем бонус в зависимости от типа метрики
+            let bonus = 0;
+            if (metric.type === 'tiered') {
+              bonus = kpiCalculations.calculateTieredBonus(result.value, metric.tiers || []);
+            } else if (metric.type === 'multiply') {
+              bonus = kpiCalculations.calculateMultiplyBonus(result.value, metric.base_rate || 0);
+            } else if (metric.type === 'percentage') {
+              bonus = kpiCalculations.calculatePercentageBonus(result.value, 100, metric.base_rate || 0);
+            } else if (metric.type === 'sum_percentage') {
+              bonus = (result.value * (metric.base_rate || 0)) / 100;
+            }
+            
+            totalBonus += bonus;
+          });
+          
+          totals[month.key] = totalBonus;
+        } catch (error) {
+          console.error(`Ошибка при загрузке результатов за ${month.key}:`, error);
+          results[month.key] = [];
+          totals[month.key] = 0;
+        }
+      }
+      
+      setMonthlyResults(results);
+      setMonthlyTotals(totals);
+    };
+    
+    loadMonthlyResults();
+  }, [months, metrics]);
+  
+  // Получение общей суммы премий за месяц
+  const getTotalMonthlyBonus = (monthKey: string): number => {
+    return monthlyTotals[monthKey] || 0;
   };
 
   // Extract unique departments
@@ -245,9 +307,18 @@ export const ResultsDashboard: React.FC<ResultsDashboardProps> = ({
                   className="w-full flex items-center justify-between p-4 hover:bg-accent/50 transition-colors"
                   onClick={() => toggleMonth(month.key)}
                 >
-                  <h3 className="text-lg font-semibold">
-                    {month.name}
-                  </h3>
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-lg font-semibold">
+                      {month.name}
+                    </h3>
+                    {isExpanded && (
+                      <div className="text-sm text-muted-foreground">
+                        Итого премий: <span className="font-semibold">
+                          {getTotalMonthlyBonus(month.key).toFixed(2)} ₽
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   {isExpanded ? (
                     <ChevronUp className="h-5 w-5 text-muted-foreground" />
                   ) : (

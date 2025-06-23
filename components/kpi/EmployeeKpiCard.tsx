@@ -4,7 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Loader2, Save } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Loader2, Save, Info } from 'lucide-react';
 import { KpiMetric, KpiResult, Employee } from './KpiTypes';
 import { kpiCalculations, employeeMetricsApi, kpiResultsApi } from '@/lib/supabase/kpi';
 import { useToast } from '@/components/ui/use-toast';
@@ -173,7 +174,7 @@ export const EmployeeKpiCard: React.FC<EmployeeKpiCardProps> = ({
       case 'multiply':
         return 'ед.';
       case 'sum_percentage':
-        return '% от суммы';
+        return '₽'; // Для ввода суммы в рублях
       default:
         return '';
     }
@@ -202,16 +203,15 @@ export const EmployeeKpiCard: React.FC<EmployeeKpiCardProps> = ({
         <div className="space-y-6">
           {hasNonTieredMetrics && (
             <div className="space-y-2">
-              <h3 className="font-medium">Простые метрики</h3>
               {filteredMetrics
                 .filter(({ metric }) => metric.type !== 'tiered')
                 .map(({ metric }) => (
                   <div key={metric.id} className="grid grid-cols-12 gap-4 items-center">
                     <div className="col-span-4">
                       <div className="font-medium">{metric.name}</div>
-                      <div className="text-sm text-muted-foreground">
+                      {/* <div className="text-sm text-muted-foreground">
                         {metric.description}
-                      </div>
+                      </div> */}
                     </div>
                     <div className="col-span-3">
                       <div className="relative">
@@ -228,6 +228,20 @@ export const EmployeeKpiCard: React.FC<EmployeeKpiCardProps> = ({
                             {getInputSuffix(metric)}
                           </div>
                         )}
+                        {metric.type === 'sum_percentage' && (
+                          <div className="absolute right-10 top-1/2 -translate-y-1/2">
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  <p>Сумма, от которой рассчитывается {metric.base_rate}%</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="col-span-4">
@@ -235,6 +249,11 @@ export const EmployeeKpiCard: React.FC<EmployeeKpiCardProps> = ({
                         <span className="font-medium">
                           {calculateBonus(metric, values[metric.id!] || 0).toFixed(2)} ₽
                         </span>
+                        {metric.type === 'sum_percentage' && (
+                          <span className="text-muted-foreground text-xs ml-2">
+                            {values[metric.id!] || 0} × {metric.base_rate}% = {calculateBonus(metric, values[metric.id!] || 0).toFixed(2)} ₽
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -244,16 +263,15 @@ export const EmployeeKpiCard: React.FC<EmployeeKpiCardProps> = ({
 
           {hasTieredMetrics && (
             <div className="space-y-2">
-              <h3 className="font-medium">Шкалируемые метрики</h3>
               {filteredMetrics
                 .filter(({ metric }) => metric.type === 'tiered')
                 .map(({ metric }) => (
                   <div key={metric.id} className="grid grid-cols-12 gap-4 items-center">
                     <div className="col-span-4">
                       <div className="font-medium">{metric.name}</div>
-                      <div className="text-sm text-muted-foreground">
+                      {/* <div className="text-sm text-muted-foreground">
                         {metric.description}
-                      </div>
+                      </div> */}
                     </div>
                     <div className="col-span-3">
                       <div className="relative">
@@ -268,16 +286,23 @@ export const EmployeeKpiCard: React.FC<EmployeeKpiCardProps> = ({
                       </div>
                     </div>
                     <div className="col-span-4">
-                      <div className="text-sm">
+                      <div className="text-sm flex items-center gap-2">
                         <span className="font-medium">
                           {calculateBonus(metric, values[metric.id!] || 0).toFixed(2)} ₽
                         </span>
-                        <span className="text-muted-foreground text-xs ml-2">
+                        <span className="text-muted-foreground text-xs">
                           {values[metric.id!] || 0} × {calculateBonus(metric, values[metric.id!] || 0) / (values[metric.id!] || 1)} ₽
                         </span>
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-1">
-                        {getTierDescription(metric, values[metric.id!] || 0)}
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent side="top">
+                              <p>{getTierDescription(metric, values[metric.id!] || 0)}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </div>
                   </div>

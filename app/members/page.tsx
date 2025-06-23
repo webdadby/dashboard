@@ -112,8 +112,6 @@ function EmployeesPageContent() {
       
       if (employeesData.length === 0) {
         setEmployees([]);
-        setActiveEmployees([]);
-        setTerminatedEmployees([]);
         return;
       }
       
@@ -158,10 +156,12 @@ function EmployeesPageContent() {
         // Преобразуем строковые даты в объекты Date для UI
         const formattedData = employeesData.map(emp => ({
           ...emp,
-          hire_date: new Date(emp.hire_date)
+          hire_date: new Date(emp.hire_date),
+          termination_date: emp.termination_date ? new Date(emp.termination_date) : null,
+          updated_at: emp.updated_at || emp.created_at // Ensure updated_at is always present
         }));
         
-        setEmployees(formattedData);
+        setEmployees(formattedData as EmployeeUI[]);
         
         // Загружаем минимальный оклад из настроек
         try {
@@ -213,8 +213,9 @@ function EmployeesPageContent() {
       setIsSubmitting(true);
 
       // Prepare data for API
+      const { tax_identifier, ...dataWithoutTaxId } = data; // Remove tax_identifier to avoid 400 error
       const employeeData = {
-        ...data,
+        ...dataWithoutTaxId,
         hire_date: data.hire_date.toISOString().split('T')[0], // Format as YYYY-MM-DD
         termination_date: data.termination_date ? data.termination_date.toISOString().split('T')[0] : null,
         base_salary: Number(data.base_salary) || 0,

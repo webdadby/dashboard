@@ -8,7 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { timesheetsApi } from '@/lib/supabase/timesheets';
-import { CalendarIcon, X } from 'lucide-react';
+import { CalendarIcon, Loader2, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -204,8 +204,7 @@ export function PayrollDialog({
         entries: timesheetEntries.map(e => ({
           id: e.id,
           date: e.work_date,
-          status: e.status,
-          hours: e.hours_worked
+          status: e.status
         }))
       });
       

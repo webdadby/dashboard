@@ -5,11 +5,18 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// Функция для создания клиента Supabase
+// Singleton instance
+let supabaseInstance: ReturnType<typeof createSupabaseClient> | null = null;
+
+// Функция для создания клиента Supabase (singleton pattern)
 export function createClient() {
-  return createSupabaseClient(supabaseUrl, supabaseKey, {
+  if (supabaseInstance) return supabaseInstance;
+  
+  supabaseInstance = createSupabaseClient(supabaseUrl, supabaseKey, {
     auth: { persistSession: false }
   });
+  
+  return supabaseInstance;
 }
 
 // Создаем клиент Supabase для использования в API функциях
