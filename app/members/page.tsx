@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase/client';
 import { employeesApi } from '@/lib/supabase/employees';
 import { toast } from "sonner";
 import { Calendar as CalendarIcon, Plus, Edit, Trash2, Loader2, User } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useEffect, useState } from "react";
@@ -40,6 +41,9 @@ const employeeSchema = z.object({
   base_salary: z.number().min(0, { message: "Оклад не может быть отрицательным" }),
   phone: z.string().optional().nullable(),
   tax_identifier: z.string().optional().nullable(),
+  is_remote: z.boolean().optional().nullable(),
+  is_secondary_job: z.boolean().optional().nullable(),
+  is_young_specialist: z.boolean().optional().nullable(),
 }).refine(data => !data.termination_date || data.hire_date <= data.termination_date, {
   message: "Дата увольнения не может быть раньше даты приема",
   path: ["termination_date"],
@@ -278,7 +282,10 @@ function EmployeesPageContent() {
       base_salary: employee.base_salary || 0,
       rate: employee.rate || 1,
       email: employee.email || "",
-      phone: employee.phone || ""
+      phone: employee.phone || "",
+      is_remote: employee.is_remote || false,
+      is_secondary_job: employee.is_secondary_job || false,
+      is_young_specialist: employee.is_young_specialist || false
     });
     setDate(employee.hire_date);
     setIsFormOpen(true);
@@ -315,7 +322,10 @@ function EmployeesPageContent() {
             rate: 1,
             base_salary: minSalary, // Default to full rate salary
             phone: "",
-            tax_identifier: ""
+            tax_identifier: "",
+            is_remote: false,
+            is_secondary_job: false,
+            is_young_specialist: false
           });
           setIsSalaryManuallyModified(false);
           setDate(new Date());
@@ -545,6 +555,56 @@ function EmployeesPageContent() {
                       {form.formState.errors.base_salary.message}
                     </p>
                   )}
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <h3 className="text-sm font-medium">Статус сотрудника</h3>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      name="is_remote"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="is_remote"
+                          checked={field.value || false}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
+                    />
+                    <Label htmlFor="is_remote" className="cursor-pointer">Удаленный сотрудник</Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      name="is_secondary_job"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="is_secondary_job"
+                          checked={field.value || false}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
+                    />
+                    <Label htmlFor="is_secondary_job" className="cursor-pointer">Не основное место работы</Label>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Controller
+                      name="is_young_specialist"
+                      control={form.control}
+                      render={({ field }) => (
+                        <Checkbox
+                          id="is_young_specialist"
+                          checked={field.value || false}
+                          onCheckedChange={field.onChange}
+                        />
+                      )}
+                    />
+                    <Label htmlFor="is_young_specialist" className="cursor-pointer">Молодой специалист</Label>
+                  </div>
                 </div>
               </div>
 

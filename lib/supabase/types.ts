@@ -2,6 +2,7 @@
 export type Employee = {
   id: number;
   created_at: string;
+  updated_at?: string;
   name: string;
   position: string;
   hire_date: string; // в формате ISO для передачи на сервер
@@ -11,6 +12,9 @@ export type Employee = {
   email?: string | null;
   phone?: string | null;
   tax_identifier?: string | null;
+  is_remote?: boolean | null; // удаленный сотрудник
+  is_secondary_job?: boolean | null; // не основное место работы
+  is_young_specialist?: boolean | null; // молодой специалист
 };
 
 // Тип для нормы рабочего времени
