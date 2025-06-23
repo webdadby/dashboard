@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { timesheetsApi } from '@/lib/supabase/timesheets';
+import { kpiResultsApi, kpiMetricsApi, kpiCalculations } from '@/lib/supabase/kpi';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,9 +55,68 @@ export function PayrollDialog({
     totalEmployeeCost: 0,
     isTaxBenefitApplied: false
   });
+  
+  // Состояние для хранения суммы KPI-премий
+  const [kpiTotalBonus, setKpiTotalBonus] = useState<number>(0);
+  const [isLoadingKpiBonus, setIsLoadingKpiBonus] = useState<boolean>(false);
 
   // Get employee's salary - use base_salary if set, otherwise calculate from rate and minSalary
   const fullSalary = employee.base_salary || 0;
+  
+  // Загрузка данных о KPI-премиях для сотрудника
+  useEffect(() => {
+    async function loadKpiBonus() {
+      if (!employee?.id || !year || !month) return;
+      
+      setIsLoadingKpiBonus(true);
+      try {
+        // Формируем период в формате YYYY-MM-DD (первый день месяца)
+        const period = `${year}-${month.toString().padStart(2, '0')}-01`;
+        
+        // Получаем все метрики
+        const allMetrics = await kpiMetricsApi.getAll();
+        
+        // Получаем результаты KPI для сотрудника за период
+        const kpiResults = await kpiResultsApi.getByEmployeeAndPeriod(employee.id, period);
+        
+        // Создаем карту результатов для быстрого доступа
+        const resultsMap: Record<number, number> = {};
+        kpiResults.forEach(result => {
+          if (result.metric_id) {
+            resultsMap[result.metric_id] = result.value || 0;
+          }
+        });
+        
+        // Рассчитываем общую сумму премии
+        let totalBonus = 0;
+        allMetrics.forEach(metric => {
+          if (metric.id && resultsMap[metric.id] !== undefined) {
+            const value = resultsMap[metric.id];
+            
+            // Рассчитываем бонус в зависимости от типа метрики
+            if (metric.type === 'tiered') {
+              totalBonus += kpiCalculations.calculateTieredBonus(value, metric.tiers || []);
+            } else if (metric.type === 'multiply') {
+              totalBonus += kpiCalculations.calculateMultiplyBonus(value, metric.base_rate || 0);
+            } else if (metric.type === 'percentage') {
+              totalBonus += kpiCalculations.calculatePercentageBonus(value, 100, metric.base_rate || 0);
+            } else if (metric.type === 'sum_percentage') {
+              totalBonus += value * (metric.base_rate || 0) / 100;
+            }
+          }
+        });
+        
+        setKpiTotalBonus(totalBonus);
+      } catch (error) {
+        console.error('Ошибка при загрузке данных о KPI-премиях:', error);
+        setKpiTotalBonus(0);
+      } finally {
+        setIsLoadingKpiBonus(false);
+      }
+    }
+    
+    loadKpiBonus();
+  }, [employee.id, year, month]);
   
   // Получаем отработанные дни из табеля
   const fetchWorkedDaysFromTimesheet = useCallback(async () => {
@@ -540,7 +600,7 @@ export function PayrollDialog({
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
             {/* Salary Summary Card */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4 bg-muted/30 rounded-lg">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 sm:gap-4 p-3 sm:p-4 bg-muted/30 rounded-lg">
               <div className="space-y-1">
                 <div className="text-sm font-medium text-muted-foreground">Оклад сотрудника</div>
                 <div className="text-2xl font-bold text-primary">
@@ -566,6 +626,15 @@ export function PayrollDialog({
                 </div>
                 <div className="text-xs text-muted-foreground">
                   {workNorm?.norm_hours ? 'за 1 час' : 'Рассчитывается автоматически'}
+                </div>
+              </div>
+              <div className="space-y-1">
+                <div className="text-sm font-medium text-muted-foreground">Премия итого</div>
+                <div className="text-xl font-semibold text-primary">
+                  {isLoadingKpiBonus ? '—' : formatCurrency(kpiTotalBonus)}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {isLoadingKpiBonus ? 'Загрузка...' : kpiTotalBonus > 0 ? 'по результатам KPI' : 'Нет данных'}
                 </div>
               </div>
             </div>
