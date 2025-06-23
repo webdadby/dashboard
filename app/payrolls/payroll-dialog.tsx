@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { ru } from 'date-fns/locale';
-import { timesheetsApi } from '@/lib/supabase';
+import { timesheetsApi } from '@/lib/supabase/timesheets';
 import { CalendarIcon, X } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { CustomDialog } from '@/components/custom-dialog';
 
-import { Employee, Payroll, WorkNorm } from '@/lib/supabase';
+import { Employee, Payroll, WorkNorm } from '@/lib/supabase/types';
 
 // Схема валидации для формы начисления зарплаты
 const payrollSchema = z.object({

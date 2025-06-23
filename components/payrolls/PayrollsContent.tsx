@@ -10,15 +10,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 
-import { 
-  Employee, 
-  Payroll, 
-  WorkNorm,
-  employeesApi,
-  payrollsApi,
-  workNormsApi,
-  settingsApi
-} from '@/lib/supabase';
+import { Employee, Payroll, WorkNorm } from '@/lib/supabase/types';
+import { employeesApi } from '@/lib/supabase/employees';
+import { payrollsApi } from '@/lib/supabase/payrolls';
+import { workNormsApi } from '@/lib/supabase/workNorms';
+import { settingsApi } from '@/lib/supabase/settings';
 
 import { PayrollsTable } from './PayrollsTable';
 import { EditWorkNormDialog } from './EditWorkNormDialog';

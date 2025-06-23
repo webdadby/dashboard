@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { vacationsApi } from '@/lib/supabase';
+import { vacationsApi } from '@/lib/supabase/vacations';
 
 // Mock the Supabase client
-vi.mock('@/lib/supabase', () => {
+vi.mock('@/lib/supabase/vacations', () => {
   return {
     vacationsApi: {
       calculateVacationPay: vi.fn(),

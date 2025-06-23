@@ -12,7 +12,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { WorkNorm } from '@/lib/supabase';
+import { WorkNorm } from '@/lib/supabase/types';
 
 interface EditWorkNormDialogProps {
   open: boolean;

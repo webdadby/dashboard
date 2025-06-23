@@ -17,6 +17,7 @@ import {
   Menu,
   CalendarDays,
   CalendarCheck2,
+  Trophy,
 } from "lucide-react"
 
 import { Home } from "lucide-react"
@@ -98,6 +99,16 @@ export default function Sidebar() {
 
           <div className="flex-1 overflow-y-auto py-4 px-4">
             <div className="space-y-6">
+              <div className="space-y-2">
+                <h3 className="px-3 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  KPI
+                </h3>
+                <div className="space-y-1">
+                  <NavItem href="/kpi" icon={Trophy}>
+                    KPI Dashboard
+                  </NavItem>
+                </div>
+              </div>
               <div>
                 <div className="px-3 mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
                   Overview

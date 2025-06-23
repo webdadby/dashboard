@@ -5,7 +5,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { CalendarDays, Plus, Users, Settings as SettingsIcon } from "lucide-react"
-import { employeesApi, vacationsApi, Employee, VacationRequestWithEmployee, VacationBalance } from "@/lib/supabase"
+import { Employee, VacationRequestWithEmployee, VacationBalance } from "@/lib/supabase/types"
+import { employeesApi } from "@/lib/supabase/employees"
+import { vacationsApi } from "@/lib/supabase/vacations"
 import { formatCurrency } from "@/lib/utils"
 import { 
   VacationRequestDialog,

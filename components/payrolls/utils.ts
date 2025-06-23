@@ -1,4 +1,4 @@
-import { WorkNorm } from '@/lib/supabase';
+import { WorkNorm } from '@/lib/supabase/types';
 
 // Округление числа до 2 знаков после запятой
 const roundToTwoDecimals = (value: number) => {

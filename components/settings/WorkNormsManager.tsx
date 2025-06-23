@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { workNormsApi, WorkNorm } from "@/lib/supabase";
+import { WorkNorm } from "@/lib/supabase/types";
+import { workNormsApi } from "@/lib/supabase/workNorms";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 // Months for display

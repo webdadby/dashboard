@@ -21,7 +21,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-import { Employee, Payroll, employeesApi, payrollsApi, settingsApi } from '@/lib/supabase';
+import { Employee, Payroll } from '@/lib/supabase/types';
+import { employeesApi } from '@/lib/supabase/employees';
+import { payrollsApi } from '@/lib/supabase/payrolls';
+import { settingsApi } from '@/lib/supabase/settings';
 import { formatCurrency } from '@/components/payrolls/utils';
 
 function EmployeeDetailContent() {

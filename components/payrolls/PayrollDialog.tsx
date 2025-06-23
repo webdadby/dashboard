@@ -5,7 +5,7 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
-import { timesheetsApi } from '@/lib/supabase';
+import { timesheetsApi } from '@/lib/supabase/timesheets';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Payroll, WorkNorm } from '@/lib/supabase';
+import { Payroll, WorkNorm } from '@/lib/supabase/types';
 import { PayrollFormValues, PayrollDialogProps } from './types';
 import { formatCurrency, roundToTwoDecimals } from './utils';
 

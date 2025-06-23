@@ -1,4 +1,4 @@
-import type { Employee, Payroll, PayrollWithEmployee, WorkNorm } from '@/lib/supabase';
+import type { Employee, Payroll, PayrollWithEmployee, WorkNorm } from '@/lib/supabase/types';
 
 export type { Employee, Payroll, PayrollWithEmployee, WorkNorm };
 
