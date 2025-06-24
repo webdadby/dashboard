@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format, startOfMonth, parseISO, isBefore } from 'date-fns';
 import { ru } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -15,6 +16,7 @@ import { employeesApi } from '@/lib/supabase/employees';
 import { payrollsApi } from '@/lib/supabase/payrolls';
 import { workNormsApi } from '@/lib/supabase/workNorms';
 import { settingsApi } from '@/lib/supabase/settings';
+import { vacationsApi } from '@/lib/supabase/vacations';
 
 import { PayrollsTable } from './PayrollsTable';
 import { EditWorkNormDialog } from './EditWorkNormDialog';
@@ -40,10 +42,16 @@ export function PayrollsContent() {
   const [taxDeduction, setTaxDeduction] = useState(0);
   
   // UI state
+  const [showRemoteEmployees, setShowRemoteEmployees] = useState(false);
   const [isEditWorkNormOpen, setIsEditWorkNormOpen] = useState(false);
   const [isPayrollDialogOpen, setIsPayrollDialogOpen] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedPayroll, setSelectedPayroll] = useState<Payroll | undefined>();
+
+  // Filter employees based on remote status
+  const filteredEmployees = employees.filter(employee => 
+    showRemoteEmployees ? true : !employee.is_remote
+  );
 
   // Fetch all necessary data when month/year changes
   useEffect(() => {
@@ -156,12 +164,76 @@ export function PayrollsContent() {
     }
   };
 
+  // Calculate vacation pay for an employee
+  const calculateVacationPay = async (employeeId: number, year: number, month: number) => {
+    try {
+      // Get all approved vacations for the employee
+      const allVacations = await vacationsApi.getAllRequests();
+      
+      // Filter for this employee and approved status
+      const filteredVacations = allVacations.filter((v: { employee_id: number; status: string }) => 
+        v.employee_id === employeeId && v.status === 'approved'
+      );
+      
+      console.log(`Found ${filteredVacations.length} approved vacations for employee ${employeeId}`);
+      
+      // Get salary payment day from settings
+      const settings = await settingsApi.get();
+      const salaryPaymentDay = settings.salary_payment_date || 5; // Default to 5th if not set
+      
+      let currentMonthPay = 0;
+      let nextMonthPay = 0;
+      
+      // Process each vacation
+      for (const vacation of filteredVacations) {
+        try {
+          const vacationStart = parseISO(vacation.start_date);
+          const vacationMonth = vacationStart.getMonth() + 1; // 1-12
+          const vacationYear = vacationStart.getFullYear();
+          
+          // Check if vacation is in the current month we're processing
+          if (vacationMonth === month && vacationYear === year) {
+            // Check if vacation starts before salary payment day
+            const paymentDate = new Date(year, month - 1, salaryPaymentDay);
+            
+            if (isBefore(vacationStart, paymentDate) || 
+                vacationStart.toDateString() === paymentDate.toDateString()) {
+              // Add to next month's pay (current month in payroll)
+              nextMonthPay += vacation.payment_amount || 0;
+            } else {
+              // Add to current month's pay
+              currentMonthPay += vacation.payment_amount || 0;
+            }
+            
+            console.log(`Vacation from ${vacation.start_date} to ${vacation.end_date}: ` +
+              `amount=${vacation.payment_amount}, ` +
+              `currentMonth=${currentMonthPay}, nextMonth=${nextMonthPay}`);
+          }
+        } catch (error) {
+          console.error('Error processing vacation:', error);
+        }
+      }
+      
+      return { currentMonth: currentMonthPay, nextMonth: nextMonthPay };
+    } catch (error) {
+      console.error('Error calculating vacation pay:', error);
+      return { currentMonth: 0, nextMonth: 0 };
+    }
+  };
+
   // Handle saving payroll
   const handleSavePayroll = async (payrollData: any) => {
     if (!selectedEmployee) return;
     
     try {
       setIsLoading(true);
+      
+      // Get vacation pay for the employee
+      const { currentMonth, nextMonth } = await calculateVacationPay(
+        selectedEmployee.id,
+        selectedYear,
+        selectedMonth
+      );
       
       // Сохраняем все данные, переданные из диалога
       // Все расчеты уже выполнены в диалоге и переданы в payrollData
@@ -170,6 +242,8 @@ export function PayrollsContent() {
         employee_id: selectedEmployee.id,
         year: selectedYear,
         month: selectedMonth,
+        vacation_pay_current: currentMonth,
+        vacation_pay_next: nextMonth,
       };
       
       // Проверяем, что все необходимые поля присутствуют
@@ -221,10 +295,71 @@ export function PayrollsContent() {
   };
 
   // Handle edit payroll click
-  const handleEditPayroll = (employee: Employee) => {
+  const handleEditPayroll = async (employee: Employee) => {
     const employeePayroll = payrolls.find(p => p.employee_id === employee.id);
+    
+    // Calculate vacation pay for the employee
+    const { currentMonth, nextMonth } = await calculateVacationPay(
+      employee.id,
+      selectedYear,
+      selectedMonth
+    );
+    
+    console.log('Calculated vacation pay:', { currentMonth, nextMonth });
+    
+    // Get current date for created_at and updated_at
+    const now = new Date().toISOString();
+    
+    // Create base payroll object with all required fields
+    const basePayroll = {
+      id: 0,
+      created_at: now,
+      updated_at: now,
+      employee_id: employee.id,
+      year: selectedYear,
+      month: selectedMonth,
+      worked_days: workNorm?.working_days || 0,
+      bonus: 0,
+      extra_pay: 0,
+      income_tax: 0,
+      pension_tax: 0,
+      advance_payment: Math.round((employee.base_salary || 0) * 0.4),
+      other_deductions: 0,
+      vacation_pay_current: 0,
+      vacation_pay_next: 0,
+      sick_leave_payment: 0,
+      salary: employee.base_salary || 0,
+      salary_accrued: 0,
+      total_accrued: 0,
+      total_deductions: 0,
+      total_payable: 0,
+      total_employee_cost: 0,
+      payable_without_salary: 0,
+      fszn_tax: 0,
+      insurance_tax: 0,
+      is_tax_benefit_applied: false,
+      payment_date: null
+    };
+    
+    // If we have an existing payroll, merge it with the base
+    const updatedPayroll = employeePayroll 
+      ? { 
+          ...basePayroll,
+          ...employeePayroll, // This will override any matching fields from basePayroll
+          vacation_pay_current: currentMonth, // Ensure we use the calculated values
+          vacation_pay_next: nextMonth,
+          updated_at: now
+        }
+      : {
+          ...basePayroll,
+          vacation_pay_current: currentMonth,
+          vacation_pay_next: nextMonth
+        };
+    
+    console.log('Updated payroll data:', updatedPayroll);
+    
     setSelectedEmployee(employee);
-    setSelectedPayroll(employeePayroll || undefined);
+    setSelectedPayroll(updatedPayroll);
     setIsPayrollDialogOpen(true);
   };
 
@@ -255,8 +390,18 @@ export function PayrollsContent() {
             selectedYear={selectedYear}
             selectedMonth={selectedMonth}
             onYearChange={setSelectedYear}
-            onMonthChange={setSelectedMonth}
+            onMonthChange={setMonth => {
+              setSelectedMonth(setMonth);
+            }}
           />
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="show-remote"
+              checked={showRemoteEmployees}
+              onCheckedChange={setShowRemoteEmployees}
+            />
+            <Label htmlFor="show-remote">Показать удаленных сотрудников</Label>
+          </div>
         </div>
       </div>
       
@@ -296,10 +441,12 @@ export function PayrollsContent() {
         </CardHeader>
         <CardContent>
           <PayrollsTable
-            employees={employees}
+            employees={filteredEmployees}
             payrolls={payrolls.map(p => ({
               ...p,
-              employee: employees.find(e => e.id === p.employee_id)!
+              employee: employees.find(e => e.id === p.employee_id)!,
+              vacation_pay_current: p.vacation_pay_current || 0,
+              vacation_pay_next: p.vacation_pay_next || 0
             }))}
             workNorm={workNorm}
             minSalary={minSalary}
